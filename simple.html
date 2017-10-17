@@ -1,0 +1,30 @@
+<html>
+<body>
+<style>
+img { display : inline-block;}
+</style>
+<script type="text/javascript">
+var i=0;
+document.write("layer1Conv2D:</br>");
+for (i=0;i<32;i++)
+{
+document.write("<img src=\"./simple_results/layer1Conv2D0/" + i + ".bmp\"/>");
+}
+document.write("</br>layer1BiasAdd:</br>");
+for (i=0;i<32;i++)
+{
+document.write("<img src=\"./simple_results/layer1BiasAdd0/" + i + ".bmp\"/>");
+}
+document.write("</br>layer1Relu:</br>");
+for (i=0;i<32;i++)
+{
+document.write("<img src=\"./simple_results/layer1Relu0/" + i + ".bmp\"/>");
+}
+document.write("</br>layer1MaxPool:</br>");
+for (i=0;i<32;i++)
+{
+document.write("<img src=\"./simple_results/layer1MaxPool0/" + i + ".bmp\"/>");
+}
+</script>
+</body>
+</html>
