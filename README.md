@@ -7,15 +7,15 @@ Zeiler, M.D. and Fergus, R., 2014, September. Visualizing and understanding conv
 
 # Scripts
 
-## simple.p
+## simple.py
 Visualization for a very small network from: https://github.com/aymericdamien/TensorFlow-Examples/
+Python3.5, CUDA 8, Tensorflow 1.0
 ```
 $ python simple.py
 $ firefox simple.html
 ```
 Screenshot:
 
-![simple screenshot](https://raw.githubusercontent.com/csnemes2/conv-net-viz/master/simple_screen.png)
 ![simple screenshot](simple_screen.png)
 
 ## alex.py
