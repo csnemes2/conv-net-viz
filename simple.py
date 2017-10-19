@@ -226,23 +226,39 @@ with tf.name_scope('score'):
 init = tf.global_variables_initializer()
 
 
-def max_activation_for_layers(tensor, top_num=128):
+def max_activation_for_layers(layer, top_num=128):
     print('Running through the test dataset')
     test_size = mnist.test.num_examples
     total_batch = int(test_size / batch_size)
-    total_activation_data = np.zeros((total_batch * batch_size, tensor.shape[3]), dtype=np.float32)
-    start = 0
-    for i in range(total_batch):
-        batch = mnist.test.next_batch(batch_size)
-        tensor_data = sess.run(tensor, feed_dict={X: batch[0]})
-        total_activation_data[start:start + batch_size, :] = np.sum(tensor_data, axis=(1, 2))
-        start += batch_size
-    print('total_activation_data.shape=' + str(total_activation_data.shape))
-    # print(total_activation_data[:100,:10])
-    top_indices = np.zeros((total_activation_data.shape[0], top_num), dtype=np.int32)
-    for ch in range(total_activation_data.shape[1]):
-        top_indices[ch, :] = sorted(range(len(total_activation_data[:, ch])),
+    num_of_images = total_batch * batch_size
+    num_of_channels = layer.shape[3]
+    total_activation_data = np.zeros((num_of_images,num_of_channels), dtype=np.float32)
+    max_activation_data = np.zeros((num_of_images,num_of_channels), dtype=np.float32)
+
+    for i in xrange(total_batch):
+        batch_start = i*batch_size
+        batch_end = (i+1) * batch_size
+        batch = mnist.test.images[batch_start:batch_end]
+        tensor_data = sess.run(layer, feed_dict={X: batch})
+        total_activation_data[batch_start:batch_end, :] = np.sum(tensor_data, axis=(1, 2))
+
+    print(str(layer) + ' total_activation_data.shape=' + str(total_activation_data.shape))
+
+    top_indices = np.zeros((num_of_images, top_num), dtype=np.int32)
+    for ch in xrange(num_of_channels):
+        top_indices[ch, :] = sorted(range(num_of_images),
                                     key=lambda i: total_activation_data[i, ch], reverse=True)[:top_num]
+
+    if False:
+        #for ch in xrange(num_of_channels):
+        for ch in xrange(1):
+            batch_indices = top_indices[ch, :]
+            batch = mnist.test.images[batch_indices]
+            tensor_data = sess.run(layer, feed_dict={X: batch})
+            for j in xrange(batch_size):
+                t=tensor_data[j,:,:,ch]
+                print(j,batch_indices[j],np.sum(t),np.max(t),np.min(t))
+
     return top_indices
 
 
@@ -252,6 +268,7 @@ def viz(sess, tensor_name):
         tensor = i[0]
         operation = i[1]
         reverse_tensor = i[2]
+        num_of_channels = tensor.shape[3]
         if tensor.name == tensor_name:
             success = True
 
@@ -262,9 +279,9 @@ def viz(sess, tensor_name):
                 tensor.shape))
             target = 'simple_results/' + tensor_name_unix
             start_clean_dir(target)
-            for channel_index in range(0, int(tensor.shape[3])):
+
+            for channel_index in xrange(num_of_channels):
                 channel_top_indices = top_indices[channel_index, :]
-                #channel_top_indices = list(xrange(128))
                 viz_channel(sess, target, tensor, reverse_tensor, channel_index, channel_top_indices)
             viz_channel(sess, target, tensor, reverse_tensor, None, list(xrange(128)))
     if not success:
@@ -323,7 +340,7 @@ def viz_channel(sess, tensor_name, tensor, reverse_tensor, ch_index, channel_top
     :param tensor:
     :param reverse_tensor:
     :param ch_index: channel index, if None, everything is reconstructed
-    :param channel_top_indices:
+    :param channel_top_indices: 1st channel, 2nd indices
     :return:
     """
     global input_viz
@@ -335,6 +352,12 @@ def viz_channel(sess, tensor_name, tensor, reverse_tensor, ch_index, channel_top
     print('\t\tTop indices=' + str(channel_top_indices[:viz_top]))
     print('\t\tnp.max(tensor_data)=' + str(np.max(tensor_data[0,:,:,:])))
     print('\t\tnp.min(tensor_data)=' + str(np.min(tensor_data[0,:,:,:])))
+
+    if False:
+         for j in xrange(128):
+            t=tensor_data[j,:,:,ch_index]
+            print(j,channel_top_indices[j],np.sum(t),np.max(t),np.min(t))
+
 
     new_tensor_data = np.zeros(tensor_data.shape, dtype=np.float32)
     if ch_index is not None:
