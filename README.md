@@ -18,5 +18,8 @@ Screenshot:
 
 ![simple screenshot](simple_screen.png)
 
+Graph:
+![simple graph](simple_graph.png)
+
 ## alex.py
 ## vgg.py

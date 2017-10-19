@@ -3,6 +3,7 @@ Simple Convolutional Neural Network Vizualization
 Author: Csaba Nemes
 This version: https://github.com/csnemes2/conv-net-viz
 Original forked from: https://github.com/aymericdamien/TensorFlow-Examples/
+http://cv-tricks.com/image-segmentation/transpose-convolution-in-tensorflow/
 """
 
 from __future__ import division, print_function, absolute_import
@@ -69,6 +70,7 @@ def reverse_operation(tensor, operation, prev_tensor, mask):
 def build_reverse_chain():
     global remembered_tensors_list
     print('\nBuilding reverse chain')
+
     last_tensor_shape = remembered_tensors_list[-1][0].shape
     last_tensor = tf.placeholder(tf.float32, last_tensor_shape)
     for i in reversed(remembered_tensors_list):
@@ -100,15 +102,16 @@ def maxpool2d(x, k=2):
 
       https: // github.com / yselivonchyk / Tensorflow_WhatWhereAutoencoder / blob / master / WhatWhereAutoencoder.py
     """
-    _, mask = tf.nn.max_pool_with_argmax(
-        x,
-        ksize=[1, k, k, 1],
-        strides=[1, k, k, 1],
-        padding='SAME')
-    mask = tf.stop_gradient(mask)
-    net =tf.nn.max_pool(x, ksize=[1, k, k, 1], strides=[1, k, k, 1],
-                      padding='SAME')
-    remember_tensor(net,mask=mask)
+    with tf.name_scope('Pool2D'):
+        _, mask = tf.nn.max_pool_with_argmax(
+            x,
+            ksize=[1, k, k, 1],
+            strides=[1, k, k, 1],
+            padding='SAME')
+        mask = tf.stop_gradient(mask)
+        net =tf.nn.max_pool(x, ksize=[1, k, k, 1], strides=[1, k, k, 1],
+                          padding='SAME')
+        remember_tensor(net,mask=mask)
 
     return net
 
@@ -158,7 +161,6 @@ def conv_net(x, weights, biases, dropout):
         # Max Pooling (down-sampling)
         conv1 = maxpool2d(conv1, k=2)
 
-    input_viz = build_reverse_chain()
 
     with tf.name_scope('layer2'):
         # Convolution Layer
@@ -166,51 +168,58 @@ def conv_net(x, weights, biases, dropout):
         # Max Pooling (down-sampling)
         conv2 = maxpool2d(conv2, k=2)
 
-    # Fully connected layer
-    # Reshape conv2 output to fit fully connected layer input
-    fc1 = tf.reshape(conv2, [-1, weights['wd1'].get_shape().as_list()[0]])
-    fc1 = tf.add(tf.matmul(fc1, weights['wd1']), biases['bd1'])
-    fc1 = tf.nn.relu(fc1)
-    # Apply Dropout
-    fc1 = tf.nn.dropout(fc1, dropout)
+    input_viz = build_reverse_chain()
 
-    # Output, class prediction
-    out = tf.add(tf.matmul(fc1, weights['out']), biases['out'])
-    return out
+    with tf.name_scope('layer3'):
+        # Fully connected layer
+        # Reshape conv2 output to fit fully connected layer input
+        fc1 = tf.reshape(conv2, [-1, weights['wd1'].get_shape().as_list()[0]])
+        fc1 = tf.add(tf.matmul(fc1, weights['wd1']), biases['bd1'])
+        fc1 = tf.nn.relu(fc1)
+        # Apply Dropout
+        fc1 = tf.nn.dropout(fc1, dropout)
+
+    with tf.name_scope('layer4'):
+        # Output, class prediction
+        out = tf.add(tf.matmul(fc1, weights['out']), biases['out'])
+        return out
 
 
-# Store layers weight & bias
-weights = {
-    # 5x5 conv, 1 input, 32 outputs
-    'wc1': tf.Variable(tf.random_normal([5, 5, 1, 32])),
-    # 5x5 conv, 32 inputs, 64 outputs
-    'wc2': tf.Variable(tf.random_normal([5, 5, 32, 64])),
-    # fully connected, 7*7*64 inputs, 1024 outputs
-    'wd1': tf.Variable(tf.random_normal([7 * 7 * 64, 1024])),
-    # 1024 inputs, 10 outputs (class prediction)
-    'out': tf.Variable(tf.random_normal([1024, num_classes]))
-}
+with tf.name_scope('variables'):
+    # Store layers weight & bias
+    weights = {
+        # 5x5 conv, 1 input, 32 outputs
+        'wc1': tf.Variable(tf.random_normal([5, 5, 1, 32])),
+        # 5x5 conv, 32 inputs, 64 outputs
+        'wc2': tf.Variable(tf.random_normal([5, 5, 32, 64])),
+        # fully connected, 7*7*64 inputs, 1024 outputs
+        'wd1': tf.Variable(tf.random_normal([7 * 7 * 64, 1024])),
+        # 1024 inputs, 10 outputs (class prediction)
+        'out': tf.Variable(tf.random_normal([1024, num_classes]))
+    }
 
-biases = {
-    'bc1': tf.Variable(tf.random_normal([32])),
-    'bc2': tf.Variable(tf.random_normal([64])),
-    'bd1': tf.Variable(tf.random_normal([1024])),
-    'out': tf.Variable(tf.random_normal([num_classes]))
-}
+    biases = {
+        'bc1': tf.Variable(tf.random_normal([32])),
+        'bc2': tf.Variable(tf.random_normal([64])),
+        'bd1': tf.Variable(tf.random_normal([1024])),
+        'out': tf.Variable(tf.random_normal([num_classes]))
+    }
 
 # Construct model
 logits = conv_net(X, weights, biases, keep_prob)
 prediction = tf.nn.softmax(logits)
 
-# Define loss and optimizer
-loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
-    logits=logits, labels=Y))
-optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
-train_op = optimizer.minimize(loss_op)
+with tf.name_scope('training'):
+    # Define loss and optimizer
+    loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+        logits=logits, labels=Y))
+    optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+    train_op = optimizer.minimize(loss_op)
 
-# Evaluate model
-correct_pred = tf.equal(tf.argmax(prediction, 1), tf.argmax(Y, 1))
-accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+with tf.name_scope('score'):
+    # Evaluate model
+    correct_pred = tf.equal(tf.argmax(prediction, 1), tf.argmax(Y, 1))
+    accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
 # Initialize the variables (i.e. assign their default value)
 init = tf.global_variables_initializer()
@@ -320,6 +329,8 @@ def save_viz_channel(target_dir, lidx, viz_pics, orig_pics, layer_pics):
 with tf.Session() as sess:
     global input_viz
     sess.run(init)
+    summary_op = tf.summary.merge_all()
+    summary_writer = tf.summary.FileWriter("simple_log", sess.graph)
 
     for step in range(1, num_steps + 1):
         batch_x, batch_y = mnist.train.next_batch(batch_size)
@@ -351,4 +362,4 @@ with tf.Session() as sess:
     viz(sess, 'layer1/Conv2D:0')
     viz(sess, 'layer1/BiasAdd:0')
     viz(sess, 'layer1/Relu:0')
-    viz(sess, 'layer1/MaxPool:0')
+    viz(sess, 'layer1/Pool2D/MaxPool:0')
