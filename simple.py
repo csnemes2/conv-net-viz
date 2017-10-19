@@ -20,7 +20,7 @@ mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
 
 # Training Parameters
 learning_rate = 0.001
-num_steps = 100
+num_steps = 10000
 batch_size = 128
 display_step = 10
 
@@ -37,7 +37,7 @@ keep_prob = tf.placeholder(tf.float32)  # dropout (keep probability)
 remembered_tensors_list = []
 
 
-def remember_tensor(tensor,mask=None):
+def remember_tensor(tensor, mask=None):
     global remembered_tensors_list
     operation = tensor.op
     print(tensor.name + ' remembered')
@@ -61,7 +61,7 @@ def reverse_operation(tensor, operation, prev_tensor, mask):
                                       padding=orig_padding)
     elif operation.type == 'MaxPool':
         orig_strides = operation.get_attr('strides')
-        return unpool(prev_tensor,mask,orig_strides)
+        return unpool(prev_tensor, mask, orig_strides)
         pass
     else:
         exit('ERROR: You did not specify a reverse operation for type= ' + operation.type)
@@ -83,6 +83,7 @@ def conv2d(x0, W, b, strides=1):
     global batch_size
 
     x1 = tf.nn.conv2d(x0, W, strides=[1, strides, strides, 1], padding='SAME')
+
     remember_tensor(x1)
 
     x2 = tf.nn.bias_add(x1, b)
@@ -109,11 +110,12 @@ def maxpool2d(x, k=2):
             strides=[1, k, k, 1],
             padding='SAME')
         mask = tf.stop_gradient(mask)
-        net =tf.nn.max_pool(x, ksize=[1, k, k, 1], strides=[1, k, k, 1],
-                          padding='SAME')
-        remember_tensor(net,mask=mask)
+        net = tf.nn.max_pool(x, ksize=[1, k, k, 1], strides=[1, k, k, 1],
+                             padding='SAME')
+        remember_tensor(net, mask=mask)
 
     return net
+
 
 def unpool(net, mask, strides):
     global batch_size
@@ -121,13 +123,13 @@ def unpool(net, mask, strides):
       https: // github.com / yselivonchyk / Tensorflow_WhatWhereAutoencoder / blob / master / WhatWhereAutoencoder.py
     """
     with tf.name_scope('UnPool2D'):
-        ksize=strides
+        ksize = strides
         input_shape = net.get_shape().as_list()
-        input_shape[0]=batch_size
+        input_shape[0] = batch_size
         output_shape = (input_shape[0], input_shape[1] * ksize[1], input_shape[2] * ksize[2], input_shape[3])
-        print('ksize='+str(ksize))
-        print('input_shape='+str(input_shape))
-        print('output_shape='+str(output_shape))
+        print('ksize=' + str(ksize))
+        print('input_shape=' + str(input_shape))
+        print('output_shape=' + str(output_shape))
         # calculation indices for batch, height, width and feature maps
         one_like_mask = tf.ones_like(mask)
         batch_range = tf.reshape(tf.range(output_shape[0], dtype=tf.int64), shape=[input_shape[0], 1, 1, 1])
@@ -161,7 +163,6 @@ def conv_net(x, weights, biases, dropout):
         # Max Pooling (down-sampling)
         conv1 = maxpool2d(conv1, k=2)
 
-
     with tf.name_scope('layer2'):
         # Convolution Layer
         conv2 = conv2d(conv1, weights['wc2'], biases['bc2'])
@@ -189,7 +190,7 @@ with tf.name_scope('variables'):
     # Store layers weight & bias
     weights = {
         # 5x5 conv, 1 input, 32 outputs
-        'wc1': tf.Variable(tf.random_normal([5, 5, 1, 32])),
+        'wc1': tf.Variable(tf.random_normal([7, 7, 1, 32])),
         # 5x5 conv, 32 inputs, 64 outputs
         'wc2': tf.Variable(tf.random_normal([5, 5, 32, 64])),
         # fully connected, 7*7*64 inputs, 1024 outputs
@@ -263,7 +264,9 @@ def viz(sess, tensor_name):
             start_clean_dir(target)
             for channel_index in range(0, int(tensor.shape[3])):
                 channel_top_indices = top_indices[channel_index, :]
+                #channel_top_indices = list(xrange(128))
                 viz_channel(sess, target, tensor, reverse_tensor, channel_index, channel_top_indices)
+            viz_channel(sess, target, tensor, reverse_tensor, None, list(xrange(128)))
     if not success:
         print('Error')
         print('Not found=' + tensor_name)
@@ -273,45 +276,88 @@ def viz(sess, tensor_name):
             print('\t' + tensor.name)
 
 
-def adjust_tensor_to_input(tensor_data, layer_index, image_shape):
-    #print(image_shape)
+def adjust_tensor_to_input(tensor_data, ch_index, image_shape):
+    # print(image_shape)
     ts = tensor_data.shape
-    #print(ts)
+    # print(ts)
     adjusted_tensor_data = np.zeros(image_shape, dtype=np.float32)
-    adjusted_tensor_data[:,:ts[1],:ts[2],0] = tensor_data[:,:,:,layer_index]
+    if ch_index is None:
+        #adjusted_tensor_data[:, :ts[1], :ts[2], 0] = np.sum(tensor_data[:, :, :, :], axis=3)
+        adjusted_tensor_data[:, :ts[1], :ts[2], 0] = tensor_data[:, :, :, 0]
+    else:
+        adjusted_tensor_data[:, :ts[1], :ts[2], 0] = tensor_data[:, :, :, ch_index]
     return adjusted_tensor_data
 
 
-def pimp_image_hist(data):
-    a = np.amax(data)
-    return data / a * 128 + 128
+def image_norm1(data):
+    amin = np.min(data)
+    positive = data + np.abs(amin)
+    amax = np.max(positive)
+    return (positive) / amax*255
+
+def image_norm2(data):
+    amax = np.max(data)
+    return (data) / amax*255
+
+def image_norm3(data):
+    for i in xrange(128):
+        amax = np.max(data[i,:,:,:])
+        data[i,:,:,:] = data[i,:,:,:]/amax*255
+    return data
+
+def image_norm4(data):
+    for i in xrange(128):
+        amin = np.min(data[i,:,:,:])
+        positive = data[i,:,:,:] + np.abs(amin)
+        amax = np.max(positive)
+        data[i,:,:,:] = positive / amax * 255
+
+    return data
 
 
-def viz_channel(sess, tensor_name, tensor, reverse_tensor, layer_index, channel_top_indices):
+def viz_channel(sess, tensor_name, tensor, reverse_tensor, ch_index, channel_top_indices):
+    """
+    Vizualization for one channel  in the tensor
+    :param sess:
+    :param tensor_name:
+    :param tensor:
+    :param reverse_tensor:
+    :param ch_index: channel index, if None, everything is reconstructed
+    :param channel_top_indices:
+    :return:
+    """
     global input_viz
 
     tensor_data = sess.run(tensor, feed_dict={X: mnist.test.images[channel_top_indices]})
-    viz_top = 3
-    print('\tVisualizing channel index' + str(layer_index))
+    viz_top = 10
+    print('\t Layer='+str(tensor))
+    print('\tVisualizing channel index' + str(ch_index))
     print('\t\tTop indices=' + str(channel_top_indices[:viz_top]))
-    print('\t\tnp.max(tensor_data)='+str(np.max(tensor_data)))
-    print('\t\tnp.min(tensor_data)=' + str(np.min(tensor_data)))
+    print('\t\tnp.max(tensor_data)=' + str(np.max(tensor_data[0,:,:,:])))
+    print('\t\tnp.min(tensor_data)=' + str(np.min(tensor_data[0,:,:,:])))
 
     new_tensor_data = np.zeros(tensor_data.shape, dtype=np.float32)
-    new_tensor_data[:, :, :, layer_index] = tensor_data[:, :, :, layer_index]
-    input_viz_to_save = sess.run(input_viz, feed_dict={reverse_tensor: new_tensor_data, X:mnist.test.images[channel_top_indices]})
+    if ch_index is not None:
+        new_tensor_data[:, :, :, ch_index] = tensor_data[:, :, :, ch_index]
+    else:
+        new_tensor_data = tensor_data
+    input_viz_to_save = sess.run(input_viz,
+                                 feed_dict={reverse_tensor: new_tensor_data, X: mnist.test.images[channel_top_indices]})
 
-    # display between 0 and 256
-    input_viz_to_save = pimp_image_hist(input_viz_to_save)
-    tensor_data = pimp_image_hist(tensor_data)
+    print('\t\tnp.max(input_viz_to_save)=' + str(np.max(input_viz_to_save[0,:,:,0])))
+    print('\t\tnp.min(input_viz_to_save)=' + str(np.min(input_viz_to_save[0,:,:,0])))
 
-    adjusted_tensor_data = adjust_tensor_to_input(tensor_data, layer_index, input_viz_to_save.shape)
+
+    adjusted_tensor_data = adjust_tensor_to_input(tensor_data, ch_index, input_viz_to_save.shape)
+
+    adjusted_tensor_data = image_norm4(adjusted_tensor_data)
+    input_viz_to_save = image_norm4(input_viz_to_save)
 
     save_viz_channel(tensor_name,
-                     layer_index,
+                     ch_index,
                      input_viz_to_save[:viz_top, :, :, :].reshape([viz_top * 28, 28]),
                      mnist.test.images[channel_top_indices[:viz_top]].reshape(viz_top * 28, 28) * 255,
-                     adjusted_tensor_data[:viz_top,:,:,:].reshape([viz_top * 28, 28]))
+                     adjusted_tensor_data[:viz_top, :, :, :].reshape([viz_top * 28, 28]))
 
 
 def start_clean_dir(target):
@@ -323,36 +369,43 @@ def start_clean_dir(target):
 
 def save_viz_channel(target_dir, lidx, viz_pics, orig_pics, layer_pics):
     pic = np.concatenate((orig_pics, layer_pics, viz_pics), axis=0)
-    save_pic(target_dir + '/' + str(lidx)+'.bmp', pic)
+    save_pic(target_dir + '/' + str(lidx), pic)
 
 
 with tf.Session() as sess:
     global input_viz
     sess.run(init)
+
     summary_op = tf.summary.merge_all()
     summary_writer = tf.summary.FileWriter("simple_log", sess.graph)
+    saver = tf.train.Saver()
 
-    for step in range(1, num_steps + 1):
-        batch_x, batch_y = mnist.train.next_batch(batch_size)
-        # Run optimization op (backprop)
-        sess.run(train_op, feed_dict={X: batch_x, Y: batch_y, keep_prob: 0.8})
-        if step % display_step == 0 or step == 1:
-            # Calculate batch loss and accuracy
-            loss, acc = sess.run([loss_op, accuracy], feed_dict={X: batch_x,
-                                                                 Y: batch_y,
-                                                                 keep_prob: 1.0})
-            print("Step " + str(step) + ", Minibatch Loss= " + \
-                  "{:.4f}".format(loss) + ", Training Accuracy= " + \
-                  "{:.3f}".format(acc))
+    ckpt_file = './simple.ckpt'
+    if os.path.isfile(ckpt_file + '.index'):
+        saver.restore(sess, ckpt_file)
+    else:
+        for step in range(1, num_steps + 1):
+            batch_x, batch_y = mnist.train.next_batch(batch_size)
+            # Run optimization op (backprop)
+            sess.run(train_op, feed_dict={X: batch_x, Y: batch_y, keep_prob: 0.8})
+            if step % display_step == 0 or step == 1:
+                # Calculate batch loss and accuracy
+                loss, acc = sess.run([loss_op, accuracy], feed_dict={X: batch_x,
+                                                                     Y: batch_y,
+                                                                     keep_prob: 1.0})
+                print("Step " + str(step) + ", Minibatch Loss= " + \
+                      "{:.4f}".format(loss) + ", Training Accuracy= " + \
+                      "{:.3f}".format(acc))
 
-    print("Optimization Finished!")
+        print("Optimization Finished!")
 
-    print(mnist.train.images.shape)
-    print(mnist.test.images.shape)
-    print(mnist.validation.images.shape)
+        print(mnist.train.images.shape)
+        print(mnist.test.images.shape)
+        print(mnist.validation.images.shape)
 
-    print(np.min(mnist.train.images[0]))
-    print(np.max(mnist.train.images[0]))
+        print(np.min(mnist.train.images[0]))
+        print(np.max(mnist.train.images[0]))
+        saver.save(sess, ckpt_file)
 
     # Calculate accuracy for 256 MNIST test images
     print("Testing Accuracy:", \
@@ -363,3 +416,4 @@ with tf.Session() as sess:
     viz(sess, 'layer1/BiasAdd:0')
     viz(sess, 'layer1/Relu:0')
     viz(sess, 'layer1/Pool2D/MaxPool:0')
+

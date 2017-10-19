@@ -23,8 +23,8 @@ def save_pic_old(img_path,rgb):
     imsave(img_path, rgb)
 
 def save_pic(img_path,rgb):
-    img = Image.fromarray(np.uint8(rgb))
-    img.save(img_path,'bmp')
+    img = Image.fromarray(rgb)
+    img.convert('RGB').save(img_path+'.jpg')
 
 def pop_file(img_path):
     I = np.asarray(Image.open(img_path))
