@@ -23,3 +23,15 @@ Graph:
 
 ## alex.py
 ## vgg.py
+
+# Preliminary tests
+I experienced what conv2d_transpose is doing exactly
+
+Most inspiring resource: <https://github.com/simo23/conv2d_transpose/blob/master/test.py>
+```
+$ ut_shape.py
+$ ut_conv.py
+$ ut_one_layer.py
+```
+Last scripts reconstructs 5th channel (this script is mainly from the cited resource)
+![5th channel](DeconvTest5.png)
