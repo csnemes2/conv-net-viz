@@ -23,8 +23,8 @@ Screenshots:
 10 most activated pathces per featuremap in Layer-2
 ![simple2 screenshot](simple2_screen.png)
 
-Download full results in pdf: [layer1](../blob/master/simple_html.pdf),
-[layer2](../blob/master/simple2_html.pdf)
+Download full results in pdf: [layer1](../master/simple_html.pdf),
+[layer2](../master/simple2_html.pdf)
 
 Graph:
 ![simple graph](simple_graph.png)
