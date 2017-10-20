@@ -25,7 +25,7 @@ Screenshots:
 
 Download full results in pdf:
 [layer1](https://raw.githubusercontent.com/csnemes2/conv-net-viz/master/simple_html.pdf),
-[layer2](.https://raw.githubusercontent.com/csnemes2/conv-net-viz/master/simple2_html.pdf)
+[layer2](https://raw.githubusercontent.com/csnemes2/conv-net-viz/master/simple2_html.pdf)
 
 Graph:
 ![simple graph](simple_graph.png)
