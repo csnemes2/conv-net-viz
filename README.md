@@ -12,11 +12,19 @@ Visualization for a very small network from: https://github.com/aymericdamien/Te
 Python3.5, CUDA 8, Tensorflow 1.0
 ```
 $ python simple.py
-$ firefox simple.html
+$ firefox simple.html // for layer-1 analysis
+$ firefox simple2.html // for layer-2 analysis
 ```
-Screenshot:
+Screenshots:
 
+10 most activated pathces per featuremap in Layer-1
 ![simple screenshot](simple_screen.png)
+
+10 most activated pathces per featuremap in Layer-2
+![simple2 screenshot](simple2_screen.png)
+
+Download full results in pdf: [layer1](../blob/master/simple_html.pdf),
+[layer2](../blob/master/simple2_html.pdf)
 
 Graph:
 ![simple graph](simple_graph.png)
