@@ -17,15 +17,14 @@ $ firefox simple2.html // for layer-2 analysis
 ```
 Screenshots:
 
-10 most activated pathces per featuremap in Layer-1
+Layer-1 convolution output
 ![simple screenshot](simple_screen.png)
 
-10 most activated pathces per featuremap in Layer-2
+Layer-2 convolution output
 ![simple2 screenshot](simple2_screen.png)
 
-Download full results in pdf:
-[layer1](https://raw.githubusercontent.com/csnemes2/conv-net-viz/master/simple_html.pdf),
-[layer2](https://raw.githubusercontent.com/csnemes2/conv-net-viz/master/simple2_html.pdf)
+Download full html pages in zip:
+[ZIP](https://drive.google.com/file/d/0BwTp6MaUSAahLUYwbzgtTFJ3Tkk/view?usp=sharing)
 
 Graph:
 ![simple graph](simple_graph.png)

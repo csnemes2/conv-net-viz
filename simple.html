@@ -1,39 +1,36 @@
 <html>
 <body>
-<h1>LAYER-1: Images selected based on max pixel activation + with best patches</h1>
+
 <style>
 img { display : inline-block;}
+td, th {
+    border: 1px solid #dddddd;
+    text-align: left;
+    padding: 8px;
+}
 </style>
 <script type="text/javascript" src="script.js"></script>
 <script type="text/javascript">
 
-function modeSelector(mode){
 
-    myFunction("./simple_results/layer1Conv2D0",mode,32,"patch")
-    myFunction("./simple_results/layer1Conv2D0",mode,32,"")
 
-    myFunction("./simple_results/layer1BiasAdd0",mode,32,"patch")
-    myFunction("./simple_results/layer1BiasAdd0",mode,32,"")
-
-    myFunction("./simple_results/layer1Relu0",mode,32,"patch")
-    myFunction("./simple_results/layer1Relu0",mode,32,"")
-
-    myFunction("./simple_results/layer1Pool2DMaxPool0",mode,32,"patch")
-    myFunction("./simple_results/layer1Pool2DMaxPool0",mode,32,"")
-
-}
-modeSelector("max")
-</script>
-<h1>LAYER-1: Images selected based on avg activation + with best patches</h1>
-
-<script type="text/javascript">
-modeSelector("sum")
 </script>
 
-<h1>LAYER-1: Fix Images set + with best patches</h1>
+
 
 <script type="text/javascript">
-modeSelector("fix")
+
+var sub_layers=[
+"./simple_results/layer1Conv2D0",
+"./simple_results/layer1BiasAdd0",
+"./simple_results/layer1Relu0",
+"./simple_results/layer1Pool2DMaxPool0"
+]
+
+print_buttons(sub_layers)
+print_divs(sub_layers, 32, "max", 200)
+
+
 </script>
 
 </body>

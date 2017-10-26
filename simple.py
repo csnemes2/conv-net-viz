@@ -12,6 +12,7 @@ import tensorflow as tf
 from helper import *
 import os
 import shutil
+import scipy.ndimage as ndimage
 
 # Import MNIST data
 from tensorflow.examples.tutorials.mnist import input_data
@@ -83,7 +84,8 @@ def reverse_operation(tensor, operation, prev_tensor, mask):
     if operation.type == 'Relu':
         return tf.nn.relu(prev_tensor)
     elif operation.type == 'BiasAdd':
-        return tf.nn.bias_add(prev_tensor, -operation.inputs[1])
+        #return tf.nn.bias_add(prev_tensor, -operation.inputs[1])
+        return prev_tensor
     elif operation.type == 'Conv2D':
         orig_strides = operation.get_attr('strides')
         orig_padding = operation.get_attr('padding')
@@ -302,7 +304,7 @@ def tensor_pretty_name(tensor_name):
     return tensor_name.replace('/', "").replace(':', "")
 
 
-def viz(sess, tensor_name, mode='sum'):
+def viz(sess, tensor_name, mode='sum', viz_top=9):
     success = False
     for i in remembered_tensors_list:
         tensor = i[0]
@@ -314,9 +316,9 @@ def viz(sess, tensor_name, mode='sum'):
 
             top_indices = max_activation_for_layers(tensor, mode=mode)
 
-            tensor_name_unix = tensor_pretty_name(tensor_name)+mode
+            tensor_name_unix = tensor_pretty_name(tensor_name) + mode
             print('Visualizing tensor' + tensor_name + '\t in folder=' + tensor_name_unix + '\tits shape=' + str(
-                tensor.shape) + " Activation calc mode="+mode)
+                tensor.shape) + " Activation calc mode=" + mode)
             target = 'simple_results/' + tensor_name_unix
             start_clean_dir(target)
 
@@ -340,7 +342,7 @@ def adjust_tensor_to_input(tensor_data, ch_index, image_shape):
     # print(image_shape)
     ts = tensor_data.shape
     # print(ts)
-    adjusted_tensor_data = np.ones(image_shape, dtype=np.float32)*255
+    adjusted_tensor_data = np.ones(image_shape, dtype=np.float32) * 255
     if ch_index is None:
         # adjusted_tensor_data[:, :ts[1], :ts[2], 0] = np.sum(tensor_data[:, :, :, :], axis=3)
         adjusted_tensor_data[:, :ts[1], :ts[2], 0] = tensor_data[:, :, :, 0]
@@ -362,14 +364,14 @@ def image_norm2(data):
 
 
 def image_norm3(data):
-    for i in xrange(128):
+    for i in xrange(data.shape[0]):
         amax = np.max(data[i, :, :, :])
         data[i, :, :, :] = data[i, :, :, :] / amax * 255
     return data
 
 
 def image_norm4(data):
-    for i in xrange(128):
+    for i in xrange(data.shape[0]):
         amin = np.min(data[i, :, :, :])
         positive = data[i, :, :, :] + np.abs(amin)
         amax = np.max(positive)
@@ -390,17 +392,21 @@ def viz_channel(sess, tensor_name, tensor, reverse_tensor, ch_index, channel_top
     :return:
     """
     global input_viz, remembered_reception_sizes
+    viz_top = 9
+    # @todo:remove this viztop outside
 
     tensor_data = sess.run(tensor, feed_dict={X: mnist.test.images[channel_top_indices]})
-    viz_top = 10
-    print('\t Layer=' + str(tensor))
-    print('\tVisualizing channel index' + str(ch_index))
+
+    print('\tLayer=' + str(tensor))
+    print('\tVisualizing channel= ' + str(ch_index))
     print('\t\tTop indices=' + str(channel_top_indices[:viz_top]))
-    print('\t\tnp.max(tensor_data)=' + str(np.max(tensor_data[0, :, :, :])))
-    print('\t\tnp.min(tensor_data)=' + str(np.min(tensor_data[0, :, :, :])))
+    print('\t\tnp.max(tensor_data) for all image on channel_' + str(ch_index) + ' =' + str(
+        np.max(tensor_data[0, :, :, ch_index])))
+    print('\t\tnp.min(tensor_data) for all image on channel_' + str(ch_index) + ' =' + str(
+        np.min(tensor_data[0, :, :, ch_index])))
 
     if False:
-        for j in xrange(128):
+        for j in xrange(viz_top):
             t = tensor_data[j, :, :, ch_index]
             print(j, channel_top_indices[j], np.sum(t), np.max(t), np.min(t))
 
@@ -411,21 +417,98 @@ def viz_channel(sess, tensor_name, tensor, reverse_tensor, ch_index, channel_top
         new_tensor_data = tensor_data
     input_viz_to_save = sess.run(input_viz,
                                  feed_dict={reverse_tensor: new_tensor_data, X: mnist.test.images[channel_top_indices]})
+    # cut for vizualization
+    # new_tensor_data = new_tensor_data[:viz_top,:,:,:]
+    # input_viz_to_save = input_viz_to_save[:viz_top,:,:,:]
+    orig_images = mnist.test.images[channel_top_indices[:viz_top]].reshape([viz_top, 28, 28, 1])
 
-    print('\t\tnp.max(input_viz_to_save)=' + str(np.max(input_viz_to_save[0, :, :, 0])))
-    print('\t\tnp.min(input_viz_to_save)=' + str(np.min(input_viz_to_save[0, :, :, 0])))
+    activation_out_shape = list(input_viz_to_save.shape)
+    activation_out_shape[0] = viz_top
 
-    normed_tensor_data = image_norm4(tensor_data)
-    adjusted_tensor_data = adjust_tensor_to_input(normed_tensor_data, ch_index, input_viz_to_save.shape)
+    p_tensor_data, p_xys = prep_for_save_activation_image(new_tensor_data[:viz_top, :, :, :], ch_index,
+                                                          activation_out_shape)
+    p_orig_images, p_orig_images_h = prep_for_save_orig_image(orig_images * 255, ch_index,
+                                                              activation_out_shape, p_xys,
+                                                              remembered_reception_sizes[tensor.name])
+    p_viz_images, p_viz_images_h = prep_for_save_orig_image(image_norm4(input_viz_to_save[:viz_top, :, :, :]), ch_index,
+                                                            activation_out_shape, p_xys,
+                                                            remembered_reception_sizes[tensor.name])
 
-    input_viz_to_save = image_norm4(input_viz_to_save)
+    save_pic(tensor_name + '/' + str(ch_index) + 'a', p_tensor_data)
+    save_pic(tensor_name + '/' + str(ch_index) + 'o', p_orig_images)
+    save_pic(tensor_name + '/' + str(ch_index) + 'oh', p_orig_images_h)
+    save_pic(tensor_name + '/' + str(ch_index) + 'v', p_viz_images)
+    save_pic(tensor_name + '/' + str(ch_index) + 'vh', p_viz_images_h)
 
-    save_viz_channel(tensor_name,
-                     remembered_reception_sizes[tensor.name],
-                     ch_index,
-                     input_viz_to_save[:viz_top, :, :, :],
-                     mnist.test.images[channel_top_indices[:viz_top]].reshape([viz_top, 28, 28, 1]),
-                     adjusted_tensor_data[:viz_top, :, :, :])
+
+def make_tiles(data, tile_size):
+    sh = list(data.shape)
+    # print (sh)
+    # +1: white padding on the right of each cell
+    ret_shape = [(sh[1] + 1) * tile_size, (sh[2] + 1) * tile_size, sh[3]]
+    ret = np.ones(ret_shape) * 255
+    idx = 0
+    for i in xrange(tile_size):
+        start_row = i * (sh[1] + 1)
+        for j in xrange(tile_size):
+            start_col = j * (sh[2] + 1)
+            if idx < sh[0]:
+                # print(start_row, start_col)
+                ret[start_row:start_row + sh[1], start_col:start_col + sh[2], :] = data[idx, :, :, :]
+                idx += 1
+    return ret
+
+
+def prep_for_save_orig_image(tensor_data, ch_index, out_shape, p_xys, reception_size):
+    print('\t\t prep_for_save_orig_image>')
+    print('\t\t reception size= ' + str(reception_size))
+    td_shape = tensor_data.shape
+    tile_size = int(np.ceil(np.sqrt(out_shape[0])))
+    assert (out_shape[0] == td_shape[0])
+
+    if p_xys is not None:
+        p_xys_short = [(i, j) for (i, j, k) in p_xys]
+
+        new_tensor_data = center_on(tensor_data, p_xys_short, reception_size)
+        red_tensor_data = color_on(tensor_data, p_xys_short, reception_size, pixel_value=255)
+        input_ratio = out_shape[1] / new_tensor_data.shape[1]
+        print('\t\t\tinput_ratio', input_ratio)
+        new_channel_data = ndimage.zoom(new_tensor_data, (1, input_ratio, input_ratio, 1), order=0)
+        print('\t\t\tnew_tensor_data.shape', new_tensor_data.shape)
+        print('\t\t\tnew_channel_data.shape', new_channel_data.shape)
+    else:
+        new_channel_data = tensor_data
+        red_tensor_data = tensor_data
+
+    return make_tiles(new_channel_data, tile_size), make_tiles(red_tensor_data, tile_size)
+
+
+def prep_for_save_activation_image(tensor_data, ch_index, out_shape):
+    print('\t\t prep_for_save_activation_image>')
+    td_shape = tensor_data.shape
+    tile_size = int(np.ceil(np.sqrt(out_shape[0])))
+    assert (out_shape[0] == td_shape[0])
+    print('\t\t out_shape=' + str(out_shape))
+    print('\t\t td_shape=' + str(td_shape))
+    input_ratio = int(out_shape[1] / td_shape[1])
+    print('\t\t zooming to activation by factor=' + str(input_ratio))
+
+    if ch_index is None:
+        return make_tiles(np.ones(out_shape) * 255, tile_size), None
+
+    channel_data = tensor_data[:, :, :, ch_index]
+    xys = max_activation_index_for_batch(channel_data, input_ratio=input_ratio)
+
+    if True:
+        for j in xrange(td_shape[0]):
+            print("\t\t max activation for image", j, "is at", xys[j])
+
+    new_channel_data = ndimage.zoom(channel_data, (1, input_ratio, input_ratio), order=0)
+
+    sh = new_channel_data.shape
+    new_channel_data = image_norm4(new_channel_data.reshape([sh[0], sh[1], sh[2], 1]))
+
+    return make_tiles(new_channel_data, tile_size), xys
 
 
 def start_clean_dir(target):
@@ -435,24 +518,58 @@ def start_clean_dir(target):
         os.makedirs(target)
 
 
+def max_in_2D_old(pics2D):
+    x, y = np.unravel_index(np.argmax(pics2D), pics2D.shape)
+    m = pics2D[x, y]
+    return (x, y)
+
+
 def max_in_2D(pics2D):
-    return np.unravel_index(np.argmax(pics2D), pics2D.shape)
+    x, y = np.unravel_index(np.argmax(pics2D), pics2D.shape)
+    m = pics2D[x, y]
+    return (x, y, m)
 
 
-def max_in_4D(pics4D):
+def max_activation_index_for_batch(pics2D_batch, input_ratio=1):
     ret = []
-    for i in xrange(pics4D.shape[0]):
-        ret.append(max_in_2D(pics4D[i, :, :, 0]))
+    for i in xrange(pics2D_batch.shape[0]):
+        (x, y, m) = max_in_2D(pics2D_batch[i, :, :])
+        ret.append((x * input_ratio, y * input_ratio, m))
     return ret
 
 
-def center_on(img, xys, reception_size):
-    # lazy overbound
+def max_in_4D_old(pics4D):
+    ret = []
+    for i in xrange(pics4D.shape[0]):
+        ret.append(max_in_2D_old(pics4D[i, :, :, 0]))
+    return ret
+
+
+def convert_4D_RGB(img):
+    assert (len(img.shape) == 4)
+
+    if img.shape[3] == 1:
+        #print ('\t\t\t == converting image to RGB ==')
+        new_shape = [img.shape[0], img.shape[1], img.shape[2], 3]
+        new_img = np.zeros(new_shape)
+        new_img[:, :, :, 0] = img[:, :, :, 0]
+        new_img[:, :, :, 1] = img[:, :, :, 0]
+        new_img[:, :, :, 2] = img[:, :, :, 0]
+        return new_img
+
+    return img
+
+
+def color_on(img, xys, reception_size, pixel_value=1):
+    img = convert_4D_RGB(img)
+
+    #print ('color_on max=',np.max(img))
+
     wing_rec = int(int(reception_size) / 2)
     total_rec = int(wing_rec * 2) + 1
 
     # dontcare mode
-    if total_rec > img.shape[1] / 2:
+    if total_rec > img.shape[1]:
         return img
 
     ret_shape = list(img.shape)
@@ -463,7 +580,70 @@ def center_on(img, xys, reception_size):
     for i in xrange(ret_shape[0]):
         (x, y) = xys[i]
 
-        #print(x, y)
+        # print(x, y)
+
+        p_xstart = x - wing_rec
+        p_ystart = y - wing_rec
+        p_xend = x + wing_rec
+        p_yend = y + wing_rec
+
+        # if p_xstart < 0:
+        #     xstart = 0
+        #     xpad = -p_xstart
+        # else:
+        #     xstart = p_xstart
+        #     xpad = 0
+
+        xstart = np.max([0, p_xstart])
+        xpad = np.max([0, -p_xstart])
+
+        # if p_ystart < 0:
+        #     ystart = 0
+        #     ypad = -p_ystart
+        # else:
+        #     ystart = p_ystart
+        #     ypad = 0
+
+        ystart = np.max([0, p_ystart])
+        ypad = np.max([0, -p_ystart])
+
+        xlen = np.min([img.shape[1], p_xend]) - xstart
+        ylen = np.min([img.shape[2], p_yend]) - ystart
+
+        # import ipdb;ipdb.set_trace()
+
+
+        # img[i, xstart:xstart + xlen, ystart:ystart + ylen, 0]=255
+        for color in [0,1,2]:
+            if color == 0:
+                val=pixel_value
+            else:
+                val=0
+            img[i, xstart:xstart + xlen, ystart, color] = val
+            img[i, xstart:xstart + xlen, ystart + ylen - 1, color] = val
+            img[i, xstart, ystart:ystart + ylen, color] = val
+            img[i, xstart + xlen - 1, ystart:ystart + ylen, color] = val
+
+    return img
+
+
+def center_on(img, xys, reception_size):
+    wing_rec = int(int(reception_size) / 2)
+    total_rec = int(wing_rec * 2) + 1
+
+    # dontcare mode
+    if total_rec > img.shape[1]:
+        return img
+
+    ret_shape = list(img.shape)
+    ret_shape[1] = total_rec
+    ret_shape[2] = total_rec
+    ret = np.zeros(ret_shape)
+
+    for i in xrange(ret_shape[0]):
+        (x, y) = xys[i]
+
+        # print(x, y)
 
         p_xstart = x - wing_rec
         p_ystart = y - wing_rec
@@ -501,8 +681,8 @@ def center_on(img, xys, reception_size):
 
 
 def save_viz_channel_max(target_dir, reception_size, lidx, viz_pics, orig_pics, layer_pics):
-    print('\t\treception_size=' + str(reception_size))
-    xys = max_in_4D(layer_pics)
+    # print('\t\treception_size=' + str(reception_size))
+    xys = max_in_4D_old(layer_pics)
 
     c_viz_pics = center_on(viz_pics, xys, reception_size)
     c_orig_pics = center_on(orig_pics, xys, reception_size)
@@ -512,13 +692,13 @@ def save_viz_channel_max(target_dir, reception_size, lidx, viz_pics, orig_pics, 
 
 
 def save_viz_channel_sum(target_dir, lidx, viz_pics, orig_pics, layer_pics, file_append=''):
-    xdim=viz_pics.shape[1]
-    ydim=viz_pics.shape[2]
+    xdim = viz_pics.shape[1]
+    ydim = viz_pics.shape[2]
     c_viz_pics = viz_pics.reshape([viz_pics.shape[0] * xdim, ydim])
     c_orig_pics = orig_pics.reshape([orig_pics.shape[0] * xdim, ydim]) * 255
     c_layer_pics = layer_pics.reshape([layer_pics.shape[0] * xdim, ydim])
     pic = np.concatenate((c_orig_pics, c_layer_pics, c_viz_pics), axis=0)
-    save_pic(target_dir + '/' + str(lidx)+file_append, pic)
+    save_pic(target_dir + '/' + str(lidx) + file_append, pic)
 
 
 def save_viz_channel(target_dir, reception_size, lidx, viz_pics, orig_pics, layer_pics):
@@ -566,13 +746,13 @@ with tf.Session() as sess:
           sess.run(accuracy, feed_dict={X: mnist.test.images[:256],
                                         Y: mnist.test.labels[:256],
                                         keep_prob: 1.0}))
-    #layer1
+    # layer1
     if True:
         viz(sess, 'layer1/Conv2D:0', mode='max')
         viz(sess, 'layer1/BiasAdd:0', mode='max')
         viz(sess, 'layer1/Relu:0', mode='max')
         viz(sess, 'layer1/Pool2D/MaxPool:0', mode='max')
-
+    if False:
         viz(sess, 'layer1/Conv2D:0', mode='sum')
         viz(sess, 'layer1/BiasAdd:0', mode='sum')
         viz(sess, 'layer1/Relu:0', mode='sum')
@@ -589,7 +769,7 @@ with tf.Session() as sess:
         viz(sess, 'layer2/BiasAdd:0', mode='max')
         viz(sess, 'layer2/Relu:0', mode='max')
         viz(sess, 'layer2/Pool2D/MaxPool:0', mode='max')
-
+    if False:
         viz(sess, 'layer2/Conv2D:0', mode='sum')
         viz(sess, 'layer2/BiasAdd:0', mode='sum')
         viz(sess, 'layer2/Relu:0', mode='sum')
