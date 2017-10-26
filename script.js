@@ -13,7 +13,7 @@ function disp_channel(path, i,  max, pxsize=200) {
         channel_name=i
         if (channel_name=="None"){channel_name="All"}
 
-        document.write("<table><tr><th>channel="+channel_name+"</th><th>activation</th><th>original</th><th>vizualization</th></tr>");
+        document.write("<table><tr><th>channel="+channel_name+"</th><th>activation</th><th>original</th><th>visualization</th></tr>");
         document.write("<tr><th>receptive area</th><td></td>");
         document.write("<td><img src=\""+path+max+"/" + i +"o"+ ".jpg\" /></td>");
         document.write("<td><img src=\""+path+max+"/" + i +"v"+ ".jpg\" /></td>");
