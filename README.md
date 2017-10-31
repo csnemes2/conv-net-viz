@@ -30,6 +30,26 @@ Graph:
 ![simple graph](simple_graph.png)
 
 ## alex.py
+Visualization for the Alex network from: http://www.cs.toronto.edu/~guerzhoy/tf_alexnet/ (converted from caffe)
+
+First, please, download their weights:
+```
+$ wget http://www.cs.toronto.edu/~guerzhoy/tf_alexnet/bvlc_alexnet.npy
+```
+
+To run the visualisation:
+```
+$ python alex.py
+$ firefox alex.html // for layer-1 analysis
+```
+
+Screenshots:
+
+Layer-1 convolution output
+![Alex screenshot](alex_screen.png)
+
+
+
 ## vgg.py
 
 # Preliminary tests
