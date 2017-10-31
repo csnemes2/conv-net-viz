@@ -139,53 +139,81 @@ class DeconvVisualization:
             print("len test images=", self.test_images.len())
         self.remembered_tensors_list = []
         self.remembered_reception_sizes = dict()
+        self.remembered_reception_sizes[self.input_ph.name] = 1
         self.input_viz = None
         self.viz_matrix_size = viz_matrix_size
         assert self.batch_size >= self.viz_matrix_size  # for demo purpose that is enough
         self.max_channel_num = max_channel_num
+        self.zero_out_siblings = dict()
 
     def add(self, x):
         self.data.append(x)
 
     def compute_receptive_field(self, tensor):
-        # assumption parent tensor should have been remembered already
-        # lazy upper bound
-        # kernel: +(kernel-1)
-        # stride: x stride
-        prec = 1
-        conw = 1
-        for i in tensor.op.inputs:
-            # for j in remembered_tensors_list:
-            #    if i == j[0]:
-            #        prec = j[4]
-            if i.name in self.remembered_reception_sizes:
-                prec = self.remembered_reception_sizes[i.name]
-                print("parent found with receptive field=" + str(prec))
-            else:
-                print(
-                    "parent not found with receptive field, its parent is the input image")
+        #
+        # Assumption: parent tensor's receptive field has been already remembered
+        #
+        print(' Compute_receptive_field(self, tensor):' + str(tensor))
 
-            # hack for now
-            if i.op.type == 'Identity':
-                conw = int(i.shape[0])
+        parent_receptor_field = 1
+        conv = 1
+
+        print(' Finding potential parent tensors')
+        potential_parents = []
+        invalid_parent_op_types = ['Identity', 'Const']
+        for i in tensor.op.inputs:
+            if i.op.type not in invalid_parent_op_types:
+                # check assumption: that we have already seen it's parent
+                if i.name not in self.remembered_reception_sizes:
+                    print(' It has a parent we have not seen:' + i.name)
+                    exit()
+                potential_parents.append(i)
+
+        if len(potential_parents) == 0:
+            print(' No valid parents found!')
+            exit()
+
+        # check parents receptive field, and select the larger one
+        max_parent_receptor_field = 1
+        for i in potential_parents:
+            parent_receptor_field = self.remembered_reception_sizes[i.name]
+            print('  Parent= ' + i.name + ' reception size=' + str(parent_receptor_field))
+            max_parent_receptor_field = np.max(
+                [max_parent_receptor_field, parent_receptor_field])
+
+        print(' max_parent_receptor_field=' + str(max_parent_receptor_field))
 
         if tensor.op.type == 'Conv2D':
-            prec = prec + (conw - 1)
+            # Find filter tensor
+            filter_tensor = None
+            for i in tensor.op.inputs:
+                if i.op.type == 'Identity':
+                    filter_tensor = i
+            assert (filter_tensor is not None)
+            # assuming filter width and filter height the same
+            filter_size = int(filter_tensor.shape[0])
+            print(' parent convolution with filter_size=' + str(filter_size))
+            max_parent_receptor_field += (filter_size - 1)
+
         try:
             orig_strides = tensor.op.get_attr('strides')
-            prec = prec * orig_strides[1]
+            print (' parent op with strides found='+str(orig_strides[1]))
+            max_parent_receptor_field = max_parent_receptor_field * orig_strides[1]
         except:
             pass
 
-        return prec
+        return max_parent_receptor_field
 
     def remember_tensor(self, tensor, mask=None):
+        print('Remembering ' + tensor.name)
         operation = tensor.op
         receptive_field = self.compute_receptive_field(tensor)
-        print(tensor.name + ' remembered' + ' receptive_field=' + str(receptive_field))
+        print(' Receptive_field computed=' + str(receptive_field))
+        # display zero out members
         self.remembered_reception_sizes[tensor.name] = receptive_field
         # 0:tensor, 1:operation, 2:reversed_tensor, 3:mask,
         self.remembered_tensors_list.append([tensor, operation, None, mask])
+        print(' ')
 
     def reverse_operation(self, tensor, operation, prev_tensor, mask):
         print('\tReversing ' + tensor.name)
@@ -422,6 +450,17 @@ class DeconvVisualization:
         for (x, y, m) in xys:
             ret.append((int(x * input_ratio), int(y * input_ratio), m))
         return ret
+
+    def print_available_tensors(self):
+        for i in self.remembered_tensors_list:
+            tensor = i[0]
+            operation = i[1]
+            reverse_tensor = i[2]
+            num_of_channels = tensor.shape[3]
+
+            print(" ")
+            print('tensor=' + str(tensor))
+            print('reverse_tensor=' + str(reverse_tensor))
 
     def viz(self, sess, tensor_name, mode='sum', viz_top=9):
         if self.input_viz is None:

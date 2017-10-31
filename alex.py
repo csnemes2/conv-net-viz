@@ -75,7 +75,7 @@ DV = viz.DeconvVisualization(batch_size=128,target_dir="alex_results", input_ph=
 net_data = load(open("bvlc_alexnet.npy", "rb"), encoding="latin1").item()
 #net_data = load("bvlc_alexnet.npy").item()
 
-def conv(input, kernel, biases, k_h, k_w, c_o, s_h, s_w,  padding="VALID", group=1):
+def conv(input, kernel, biases, k_h, k_w, c_o, s_h, s_w,  padding="VALID", group=1, do_viz=False):
     global DV
     '''From https://github.com/ethereon/caffe-tensorflow
     '''
@@ -87,15 +87,24 @@ def conv(input, kernel, biases, k_h, k_w, c_o, s_h, s_w,  padding="VALID", group
     
     if group==1:
         conv = convolve(input, kernel)
-        DV.remember_tensor(conv)
+        if do_viz:
+            DV.remember_tensor(conv)
     else:
         input_groups =  tf.split(input, group, 3)   #tf.split(3, group, input)
         kernel_groups = tf.split(kernel, group, 3)  #tf.split(3, group, kernel) 
         output_groups = [convolve(i, k) for i,k in zip(input_groups, kernel_groups)]
-        for g in output_groups:
-            DV.remember_tensor(g)
+        if do_viz:
+            for g in output_groups:
+                DV.remember_tensor(g)
         conv = tf.concat(output_groups, 3)          #tf.concat(3, output_groups)
-    return  tf.reshape(tf.nn.bias_add(conv, biases), [-1]+conv.get_shape().as_list()[1:])
+        if do_viz:
+            DV.remember_tensor(conv)
+    tmp = tf.nn.bias_add(conv, biases)
+    if do_viz:
+        DV.remember_tensor(tmp)
+    #tmp = tf.reshape(tmp, [-1]+conv.get_shape().as_list()[1:])
+    #DV.remember_tensor(tmp)
+    return tmp
 
 
 
@@ -107,7 +116,7 @@ with tf.name_scope('layer1'):
     k_h = 11; k_w = 11; c_o = 96; s_h = 4; s_w = 4
     conv1W = tf.Variable(net_data["conv1"][0])
     conv1b = tf.Variable(net_data["conv1"][1])
-    conv1_in = conv(x, conv1W, conv1b, k_h, k_w, c_o, s_h, s_w, padding="SAME", group=1)
+    conv1_in = conv(x, conv1W, conv1b, k_h, k_w, c_o, s_h, s_w, padding="SAME", group=1, do_viz= True)
     conv1 = tf.nn.relu(conv1_in)
     DV.remember_tensor(conv1)
 
@@ -216,6 +225,8 @@ sess.run(init)
 summary_op = tf.summary.merge_all()
 summary_writer = tf.summary.FileWriter("alex_log", sess.graph)
 
+DV.print_available_tensors()
+#exit()
 DV.viz(sess, 'layer1/Conv2D:0', mode='max')
 
 exit()
