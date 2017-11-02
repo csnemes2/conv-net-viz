@@ -149,7 +149,7 @@ class DeconvVisualization:
         self.test_images = test_images
         if self.test_images:
             print("len test images=", self.test_images.len())
-        self.remembered_tensors_list = []  # rename to name
+        self.remembered_tensors_list = []
         # tensor_name -> tensor_info
         self.remembered_tensors = dict()
         # tensor_name -> [(tenso_name,port)]
@@ -250,7 +250,7 @@ class DeconvVisualization:
         # display zero out members
         self.remembered_reception_sizes[tensor.name] = receptive_field
         # 0:tensor, 1:operation, 2:reversed_tensor, 3:mask,
-        self.remembered_tensors_list.append([tensor, operation, None, mask])
+        self.remembered_tensors_list.append(tensor.name)
 
         # caching input relations
         if operation.name not in self.cache_operation_inputs_remembered:
@@ -267,6 +267,7 @@ class DeconvVisualization:
 
         if tensor.name not in self.remembered_tensors:
             self.remembered_tensors[tensor.name] = TensorInfo(tensor)
+            self.remembered_tensors[tensor.name].mask = mask
         else:
             print(' Error: tensor already found =' + str(tensor.name))
             exit
@@ -315,7 +316,7 @@ class DeconvVisualization:
             print(' Erro not in remembered inputs')
             exit()
 
-    def reverse_operation(self, tensor, operation, prev_tensor, mask):
+    def reverse_operation(self, tensor_name):
         #
         #   assumption - outputs
         #
@@ -334,7 +335,6 @@ class DeconvVisualization:
         #   reversing operation
         #           Each operation is reversed when the first output tensor is visited
         #
-        tensor_name = tensor.name
         tensor_info = self.remembered_tensors[tensor_name]
 
         # Reversing tensor
@@ -387,8 +387,8 @@ class DeconvVisualization:
 
     def build_reverse_chain(self):
         print('\nBuilding reverse chain')
-        last_tensor_name = self.remembered_tensors_list[-1][0].name
-        last_tensor_shape = self.remembered_tensors_list[-1][0].shape
+        last_tensor_name = self.remembered_tensors_list[-1]
+        last_tensor_shape = self.remembered_tensors[last_tensor_name].tensor.shape
         last_rev_tensors = [tf.placeholder(tf.float32, last_tensor_shape)]
 
         self.remembered_inputs[last_tensor_name] = [('__OUTPUT__', 0)]
@@ -396,14 +396,11 @@ class DeconvVisualization:
         self.remembered_tensors['__OUTPUT__'].reversed_input_list = last_rev_tensors
 
         rlist = reversed(self.remembered_tensors_list)
-        for i in rlist:
-            i_name = i[0].name
-            i[2] = None
-            self.reverse_operation(i[0], i[1], i[2], i[3])
-            i[2] = self.remembered_tensors[i_name].reverse_tensor
+        for i_name in rlist:
+            self.reverse_operation(i_name)
 
-        first_tensor = self.remembered_tensors_list[0][0]
-        self.input_viz = self.remembered_tensors[first_tensor.name].reversed_input_list[0]
+        first_tensor_name = self.remembered_tensors_list[0]
+        self.input_viz = self.remembered_tensors[first_tensor_name].reversed_input_list[0]
         print (' Setting self.input_viz=',self.input_viz)
 
         print('Building done\n')
@@ -609,25 +606,20 @@ class DeconvVisualization:
         return ret
 
     def print_available_tensors(self):
-        for i in self.remembered_tensors_list:
-            tensor = i[0]
-            operation = i[1]
-            reverse_tensor = i[2]
-            num_of_channels = tensor.shape[3]
+        for i_name in self.remembered_tensors_list:
 
             print(" ")
-            print('tensor=' + str(tensor))
-            print('reverse_tensor=' + str(reverse_tensor))
+            print('tensor=' + str(i_name))
+            print('reverse_tensor=' + str(self.remembered_tensors[i_name].reverse_tensor))
 
     def viz(self, sess, tensor_name, mode='sum', viz_top=9):
         if self.input_viz is None:
             print("self.input_viz is None. Have you run build_reverse_chain()?")
             exit()
         success = False
-        for i in self.remembered_tensors_list:
-            tensor = i[0]
-            operation = i[1]
-            reverse_tensor = i[2]
+        for i_name in self.remembered_tensors_list:
+            tensor = self.remembered_tensors[i_name].tensor
+            reverse_tensor = self.remembered_tensors[i_name].reverse_tensor
             num_of_channels = tensor.shape[3]
 
             # limit num of channels:
@@ -659,8 +651,7 @@ class DeconvVisualization:
             print('Not found=' + tensor_name)
             print('In')
             for i in self.remembered_tensors_list:
-                tensor = i[0]
-                print('\t' + tensor.name)
+                print('\t' + i)
 
     def max_activation_for_layers(self, sess, layer, mode='sum'):
         test_size = self.test_images.len()
