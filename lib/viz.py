@@ -128,6 +128,18 @@ def color_on(img, xys, reception_size, pixel_value=1, color_dim=0):
     return img
 
 
+class TensorInfo:
+    def __init__(self, tensor, reverse_tensor=None, reversed_input_list=[],
+                 list_of_zero_out_siblings=[], mask=None):
+        self.tensor = tensor
+        self.reverse_tensor = reverse_tensor
+        # reversed operation actually belongs to the operation
+        # however we remember for each operation via the first output
+        self.reversed_input_list = reversed_input_list
+        self.list_of_zero_out_siblings = list_of_zero_out_siblings
+        self.mask = mask
+
+
 class DeconvVisualization:
     def __init__(self, batch_size=9, target_dir="results", input_ph=None,
                  test_images=None, viz_matrix_size=9, max_channel_num=10):
@@ -137,14 +149,21 @@ class DeconvVisualization:
         self.test_images = test_images
         if self.test_images:
             print("len test images=", self.test_images.len())
-        self.remembered_tensors_list = []
+        self.remembered_tensors_list = []  # rename to name
+        # tensor_name -> tensor_info
+        self.remembered_tensors = dict()
+        # tensor_name -> [(tenso_name,port)]
+        #   tensor_name lead to the operation
+        self.remembered_inputs = dict()
+        self.cache_operation_inputs_remembered = []
+        self.cache_operation_reversed = []
         self.remembered_reception_sizes = dict()
         self.remembered_reception_sizes[self.input_ph.name] = 1
         self.input_viz = None
         self.viz_matrix_size = viz_matrix_size
         assert self.batch_size >= self.viz_matrix_size  # for demo purpose that is enough
         self.max_channel_num = max_channel_num
-        self.zero_out_siblings = dict()
+        # self.zero_out_siblings = dict()
 
     def add(self, x):
         self.data.append(x)
@@ -197,60 +216,198 @@ class DeconvVisualization:
 
         try:
             orig_strides = tensor.op.get_attr('strides')
-            print (' parent op with strides found='+str(orig_strides[1]))
+            print(' parent op with strides found=' + str(orig_strides[1]))
             max_parent_receptor_field = max_parent_receptor_field * orig_strides[1]
         except:
             pass
 
         return max_parent_receptor_field
 
+    def get_potential_parents(self, tensor):
+        print(' Finding potential parent tensors')
+        potential_parents = []
+        invalid_parent_op_types = ['Identity', 'Const']
+        for i in tensor.op.inputs:
+            if i.op.type not in invalid_parent_op_types:
+                # check assumption: that we have already seen it's parent
+                if i.name not in self.remembered_reception_sizes:
+                    print(' It has a parent we have not seen:' + i.name)
+                    exit()
+                potential_parents.append(i)
+
+        if len(potential_parents) == 0:
+            print(' No valid parents found!')
+            exit()
+        return potential_parents
+
     def remember_tensor(self, tensor, mask=None):
-        print('Remembering ' + tensor.name)
+        tensor_name = tensor.name
+        print('Remembering ' + tensor_name)
         operation = tensor.op
+
         receptive_field = self.compute_receptive_field(tensor)
         print(' Receptive_field computed=' + str(receptive_field))
         # display zero out members
         self.remembered_reception_sizes[tensor.name] = receptive_field
         # 0:tensor, 1:operation, 2:reversed_tensor, 3:mask,
         self.remembered_tensors_list.append([tensor, operation, None, mask])
+
+        # caching input relations
+        if operation.name not in self.cache_operation_inputs_remembered:
+            print(' Caching input relations:')
+            parents = self.get_potential_parents(tensor)
+            for (idx, i) in enumerate(parents):
+                print('\t' + str(i.name) + ' goes to ' + str(
+                    operation.name) + ' op at port=' + str(idx))
+                if i.name in self.remembered_inputs:
+                    self.remembered_inputs[i.name].append((tensor_name, idx))
+                else:
+                    self.remembered_inputs[i.name] = [(tensor_name, idx)]
+            self.cache_operation_inputs_remembered.append(operation.name)
+
+        if tensor.name not in self.remembered_tensors:
+            self.remembered_tensors[tensor.name] = TensorInfo(tensor)
+        else:
+            print(' Error: tensor already found =' + str(tensor.name))
+            exit
         print(' ')
 
-    def reverse_operation(self, tensor, operation, prev_tensor, mask):
-        print('\tReversing ' + tensor.name)
-        if operation.type == 'Relu':
-            return tf.nn.relu(prev_tensor)
-        elif operation.type == 'BiasAdd':
-            # return tf.nn.bias_add(prev_tensor, -operation.inputs[1])
-            return prev_tensor
-        elif operation.type == 'Conv2D':
-            orig_strides = operation.get_attr('strides')
-            orig_padding = operation.get_attr('padding')
-            orig_shape = operation.inputs[0].shape.as_list()
-            orig_shape[0] = self.batch_size
-            return tf.nn.conv2d_transpose(prev_tensor, operation.inputs[1],
-                                          output_shape=orig_shape,
-                                          strides=orig_strides,
-                                          padding=orig_padding)
-        elif operation.type == 'MaxPool':
-            orig_strides = operation.get_attr('strides')
-            return self.unpool(prev_tensor, mask, orig_strides)
-            pass
+    def find_op_out_tensor(self, tensor):
+        tensor_name = tensor.name
+        print('\t\tFinding outputs')
+        output = []
+        for o in tensor.op.outputs:
+            print('\t\t found=', o)
+            output.append(o)
+
+        return output
+
+    def accessing_reverse(self, tensor_name):
+        print('\t\tAccessing the reverse of ' + tensor_name)
+        tensor_info = self.remembered_tensors[tensor_name]
+
+        if tensor_info.reverse_tensor is not None:
+            print('\t\t Founded earlier=' + str(tensor_info.reverse_tensor.name))
+            return tensor_info.reverse_tensor
+
+        # Reversing tensor
+        if tensor_name in self.remembered_inputs:
+            inputs = self.remembered_inputs[tensor_name]
+            if len(inputs) == 1:
+                (child_op_first_tensor_name, port) = inputs[0]
+                ch_tensor = self.remembered_tensors[child_op_first_tensor_name]
+                if port < len(ch_tensor.reversed_input_list):
+                    tensor_info.reverse_tensor = ch_tensor.reversed_input_list[port]
+                    print('\t\t Reverse found: ' + str(tensor_name) + '->' + str(
+                        tensor_info.reverse_tensor))
+                    return tensor_info.reverse_tensor
+                else:
+                    print('Error: port out of list')
+                    print('port', port)
+                    print('ch_tensor.tensor', ch_tensor.tensor)
+                    print('ch_tensor.reversed_input_list', ch_tensor.reversed_input_list)
+                    exit()
+            else:
+                print('Error: not implemented: tensor is used in multi operation.')
+                exit()
+                # an adder unit should be implemented
         else:
-            exit(
-                'ERROR: You did not specify a reverse operation for type= ' + operation.type)
+            print(' Erro not in remembered inputs')
+            exit()
+
+    def reverse_operation(self, tensor, operation, prev_tensor, mask):
+        #
+        #   assumption - outputs
+        #
+        #           #1      an operation can have multi output tensors
+        #           #2      one output tensor can be used several places
+        #
+        #   assumption - inputs
+        #
+        #           #1      an operation can have multi inputs
+        #
+        #   reversing tensor
+        #           Every reverse tensor already created during reversing operation.
+        #           We only have to find it.
+        #           When used at several places: we have to add them (not implemented yet)
+        #
+        #   reversing operation
+        #           Each operation is reversed when the first output tensor is visited
+        #
+        tensor_name = tensor.name
+        tensor_info = self.remembered_tensors[tensor_name]
+
+        # Reversing tensor
+        print('  Reversing tensor=' + str(tensor_name))
+        ret = self.accessing_reverse(tensor_name)
+
+        # Reversing operation
+        #
+        #   We need the outputs of operation, and the reverse of them
+        #   We need to reverse the operation itself
+        #   We have to create the input reverse tensors
+        tensor = self.remembered_tensors[tensor_name].tensor
+        mask = self.remembered_tensors[tensor_name].mask
+        operation = tensor.op
+
+        if operation not in self.cache_operation_reversed:
+            print('  Reversing operation=' + str(operation.name))
+
+            # Finding the otputs
+            output_tensors = self.find_op_out_tensor(tensor)
+            output_reversed_tensors = [self.accessing_reverse(i.name) for i in
+                                       output_tensors]
+
+            if operation.type == 'Relu':
+                out = [tf.nn.relu(output_reversed_tensors[0])]
+
+            elif operation.type == 'BiasAdd':
+                out = [output_reversed_tensors[0]]
+            elif operation.type == 'Conv2D':
+                orig_strides = operation.get_attr('strides')
+                orig_padding = operation.get_attr('padding')
+                orig_shape = operation.inputs[0].shape.as_list()
+                orig_shape[0] = self.batch_size
+                out = [ tf.nn.conv2d_transpose(output_reversed_tensors[0], operation.inputs[1],
+                                              output_shape=orig_shape,
+                                              strides=orig_strides,
+                                              padding=orig_padding)]
+            elif operation.type == 'MaxPool':
+                orig_strides = operation.get_attr('strides')
+                out = [ self.unpool(output_reversed_tensors[0], mask, orig_strides)]
+                pass
+            else:
+                exit(
+                    'ERROR: You did not specify a reverse operation for type= ' + operation.type)
+
+            for i in out:
+                print('\t\tCreating reverse inputs= '+str(i.name))
+            tensor_info.reversed_input_list = out
+            return ret
 
     def build_reverse_chain(self):
         print('\nBuilding reverse chain')
-
+        last_tensor_name = self.remembered_tensors_list[-1][0].name
         last_tensor_shape = self.remembered_tensors_list[-1][0].shape
-        last_tensor = tf.placeholder(tf.float32, last_tensor_shape)
-        for i in reversed(self.remembered_tensors_list):
-            i[2] = last_tensor
-            last_tensor = self.reverse_operation(i[0], i[1], i[2], i[3])
+        last_rev_tensors = [tf.placeholder(tf.float32, last_tensor_shape)]
 
-        self.input_viz = last_tensor
+        self.remembered_inputs[last_tensor_name] = [('__OUTPUT__', 0)]
+        self.remembered_tensors['__OUTPUT__'] = TensorInfo(None)
+        self.remembered_tensors['__OUTPUT__'].reversed_input_list = last_rev_tensors
+
+        rlist = reversed(self.remembered_tensors_list)
+        for i in rlist:
+            i_name = i[0].name
+            i[2] = None
+            self.reverse_operation(i[0], i[1], i[2], i[3])
+            i[2] = self.remembered_tensors[i_name].reverse_tensor
+
+        first_tensor = self.remembered_tensors_list[0][0]
+        self.input_viz = self.remembered_tensors[first_tensor.name].reversed_input_list[0]
+        print (' Setting self.input_viz=',self.input_viz)
+
         print('Building done\n')
-        return last_tensor
+        return self.input_viz
 
     def unpool(self, net, mask, strides):
         """

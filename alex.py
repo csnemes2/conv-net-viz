@@ -52,7 +52,7 @@ DB = imagenet.ImageDB("/home/csn/IMAGENET/2012_img_val_227")
 DB.limit_len(1024)
 
 x = tf.placeholder(tf.float32, (None,) + xdim)
-DV = viz.DeconvVisualization(batch_size=128,target_dir="alex_results", input_ph=x, test_images=DB, max_channel_num= 20)
+DV = viz.DeconvVisualization(batch_size=128,target_dir="alex_results", input_ph=x, test_images=DB, max_channel_num= 6)
 
 ################################################################################
 
