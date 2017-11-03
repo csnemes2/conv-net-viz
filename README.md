@@ -42,15 +42,17 @@ To run the visualisation:
 $ python alex.py
 $ firefox alex.html // for layer-1 analysis
 $ firefox alex2.html // for layer-2 analysis
+$ firefox alex3.html // for layer-3 analysis
 ```
 
 Screenshots:
 
 Layer-1 convolution output
 ![Alex screenshot](alex_screen.png)
-Layer-2 convolution output (first half)
+Layer-2 convolution output
 ![Alex screenshot](alex2_screen.png)
-
+Layer-3 convolution output (tends to react on dog, or dog hair? or dog eye?)
+![Alex screenshot](alex3_screen.png)
 
 ## vgg.py
 

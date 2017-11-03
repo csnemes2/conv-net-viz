@@ -205,9 +205,8 @@ with tf.name_scope('layer2'):
     #maxpool2
     #max_pool(3, 3, 2, 2, padding='VALID', name='pool2')
     k_h = 3; k_w = 3; s_h = 2; s_w = 2; padding = 'VALID'
-    maxpool2 = tf.nn.max_pool(lrn2, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
-
-input_viz = DV.build_reverse_chain()
+    #maxpool2 = tf.nn.max_pool(lrn2, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
+    maxpool2 = maxpool2d(lrn2, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
 
 with tf.name_scope('layer3'):
     #conv3
@@ -215,8 +214,11 @@ with tf.name_scope('layer3'):
     k_h = 3; k_w = 3; c_o = 384; s_h = 1; s_w = 1; group = 1
     conv3W = tf.Variable(net_data["conv3"][0])
     conv3b = tf.Variable(net_data["conv3"][1])
-    conv3_in = conv(maxpool2, conv3W, conv3b, k_h, k_w, c_o, s_h, s_w, padding="SAME", group=group)
+    conv3_in = conv(maxpool2, conv3W, conv3b, k_h, k_w, c_o, s_h, s_w, padding="SAME", group=group, do_viz=True)
     conv3 = tf.nn.relu(conv3_in)
+    DV.remember_tensor(conv3)
+
+input_viz = DV.build_reverse_chain()
 
 with tf.name_scope('layer4'):
     #conv4
@@ -274,12 +276,17 @@ sess.run(init)
 summary_op = tf.summary.merge_all()
 summary_writer = tf.summary.FileWriter("alex_log", sess.graph)
 
-DV.print_available_tensors()
-#exit()
+#DV.print_available_tensors()
+
 #DV.viz(sess, 'layer1/Conv2D:0', mode='max')
 #DV.viz(sess, 'layer1/Pool2D/MaxPool:0', mode='max')
-DV.viz(sess, 'layer2/Conv2D:0', mode='max')
-DV.viz(sess, 'layer2/Conv2D_1:0', mode='max')
+
+#DV.viz(sess, 'layer2/Conv2D:0', mode='max')
+#DV.viz(sess, 'layer2/Conv2D_1:0', mode='max')
+
+DV.viz(sess, 'layer3/Conv2D:0', mode='max')
+DV.viz(sess, 'layer3/Conv2D_1:0', mode='max')
+
 
 exit()
 t = time.time()
