@@ -5,7 +5,7 @@ from helper import *
 import os
 import shutil
 import scipy.ndimage as ndimage
-
+import time
 
 def center_on(img, xys, reception_size):
     wing_rec = int(int(reception_size) / 2)
@@ -753,9 +753,12 @@ class DeconvVisualization:
         sum_activation_data = np.zeros((num_of_images, num_of_channels), dtype=np.float32)
         max_activation_data = np.zeros((num_of_images, num_of_channels), dtype=np.float32)
 
+        time1 = time.time()
+
         for i in xrange(total_batch):
             batch_start = i * self.batch_size
             batch_end = (i + 1) * self.batch_size
+            #todo:speed the loading up
             batch = self.test_images.get_batch(xrange(batch_start, batch_end))
             tensor_data = sess.run(layer, feed_dict={self.input_ph: batch})
             sum_activation_data[batch_start:batch_end, :] = np.sum(tensor_data,
@@ -765,14 +768,23 @@ class DeconvVisualization:
 
         print(str(layer) + ' sum_activation_data.shape=' + str(sum_activation_data.shape))
 
+        time2 = time.time()
+
         top_indices = np.zeros((num_of_images, self.batch_size), dtype=np.int32)
-        for ch in xrange(num_of_channels):
+
+        act_num_of_channels = np.min((num_of_channels, self.max_channel_num))
+        for ch in xrange(act_num_of_channels):
             activation_base = sum_activation_data
             if mode == 'max':
                 activation_base = max_activation_data
             top_indices[ch, :] = sorted(range(num_of_images),
                                         key=lambda i: activation_base[i, ch],
                                         reverse=True)[:self.batch_size]
+
+        time3 = time.time()
+        print('\t==Max Activation Duration - forward=\t{} sec'.format(time2-time1))
+        print('\t==Max Activation Duration - sorting=\t{} sec'.format(time3-time2))
+        print('\t==Max Activation Duration - full=\t{} sec'.format(time3 - time1))
 
         if False:
             # for ch in xrange(num_of_channels):

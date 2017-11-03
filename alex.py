@@ -50,7 +50,7 @@ im2 = (imread("poodle.png")[:,:,:3]).astype(float32)
 im2[:, :, 0], im2[:, :, 2] = im2[:, :, 2], im2[:, :, 0]
 
 DB = imagenet.ImageDB("/home/csn/IMAGENET/2012_img_val_227")
-DB.limit_len(1024)
+DB.limit_len(4096)
 
 x = tf.placeholder(tf.float32, (None,) + xdim)
 DV = viz.DeconvVisualization(batch_size=128,target_dir="alex_results", input_ph=x, test_images=DB, max_channel_num= 6)
