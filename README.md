@@ -46,6 +46,9 @@ $ firefox alex3.html // for layer-3 analysis
 $ firefox alex4.html // for layer-4 analysis
 ```
 
+Download full html pages for the first5 channel in each conv in zip:
+[ZIP](https://drive.google.com/open?id=1i3x78wTukS6eHTTvl3pwbObymNNdhFZd)
+
 Screenshots:
 
 Layer-1 convolution output
