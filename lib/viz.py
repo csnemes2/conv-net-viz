@@ -370,6 +370,8 @@ class DeconvVisualization:
 
             elif operation.type == 'BiasAdd':
                 out = [output_reversed_tensors[0]]
+            elif operation.type == 'Sub':
+                out = [output_reversed_tensors[0]]
             elif operation.type == 'LRN':
                 out = [output_reversed_tensors[0]]
             elif operation.type == 'Conv2D':

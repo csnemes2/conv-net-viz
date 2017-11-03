@@ -98,6 +98,18 @@ Change DB.limit_len(8192) for more pictures
 
 ## vgg.py
 
+Visualization for the VGG network from: http://www.cs.toronto.edu/~frossard/post/vgg16/ (converted from caffe)
+
+First, please, download their weights:
+```
+$ wget https://www.cs.toronto.edu/~frossard/vgg16/vgg16_weights.npz
+```
+
+Screenshots:
+
+Layer-1 convolution output
+![VGG screenshot](vgg_screen.png)
+
 # Preliminary tests
 I experienced what conv2d_transpose is doing exactly
 

@@ -8,6 +8,12 @@ def load_pic_BGR(img_path):
     im1[:, :, 0], im1[:, :, 2] = im1[:, :, 2].copy(), im1[:, :, 0].copy()
     return im1
 
+
+def load_pic_RGB(img_path):
+    im1 = np.array(Image.open(img_path, mode='r').convert('RGB'), dtype=np.float32)
+    return im1
+
+
 def save_pic_RGB(img_path, rgb):
     if len(rgb.shape) == 2:
         img = Image.fromarray(np.uint8(rgb))
