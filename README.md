@@ -41,13 +41,15 @@ To run the visualisation:
 ```
 $ python alex.py
 $ firefox alex.html // for layer-1 analysis
+$ firefox alex2.html // for layer-2 analysis
 ```
 
 Screenshots:
 
 Layer-1 convolution output
 ![Alex screenshot](alex_screen.png)
-
+Layer-2 convolution output (first half)
+![Alex screenshot](alex2_screen.png)
 
 
 ## vgg.py

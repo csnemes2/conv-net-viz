@@ -26,6 +26,7 @@ import urllib
 from numpy import random
 from lib import viz
 from lib import imagenet
+import uuid
 
 import tensorflow as tf
 
@@ -36,7 +37,7 @@ train_y = zeros((1, 1000))
 xdim = train_x.shape[1:]
 ydim = train_y.shape[1]
 
-
+b_local_respose = True
 ################################################################################
 #Read Image, and change to BGR
 
@@ -94,8 +95,11 @@ def conv(input, kernel, biases, k_h, k_w, c_o, s_h, s_w,  padding="VALID", group
         kernel_groups = tf.split(kernel, group, 3)  #tf.split(3, group, kernel)
         output_groups = [convolve(i, k) for i,k in zip(input_groups, kernel_groups)]
         if do_viz:
-            for g in output_groups:
+            for g in input_groups:
                 DV.remember_tensor(g)
+            same_level_hash = uuid.uuid4()
+            for g in output_groups:
+                DV.remember_tensor(g,hash_list=[same_level_hash])
         conv = tf.concat(output_groups, 3)          #tf.concat(3, output_groups)
         if do_viz:
             DV.remember_tensor(conv)
@@ -157,7 +161,7 @@ with tf.name_scope('layer1'):
 
     #lrn1
     #lrn(2, 2e-05, 0.75, name='norm1')
-    if True:
+    if b_local_respose:
         radius = 2; alpha = 2e-05; beta = 0.75; bias = 1.0
         lrn1 = tf.nn.local_response_normalization(conv1,
                                                           depth_radius=radius,
@@ -174,7 +178,6 @@ with tf.name_scope('layer1'):
     #maxpool1 = tf.nn.max_pool(lrn1, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
     maxpool1 = maxpool2d(lrn1, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
 
-input_viz = DV.build_reverse_chain()
 
 with tf.name_scope('layer2'):
     #conv2
@@ -182,23 +185,29 @@ with tf.name_scope('layer2'):
     k_h = 5; k_w = 5; c_o = 256; s_h = 1; s_w = 1; group = 2
     conv2W = tf.Variable(net_data["conv2"][0])
     conv2b = tf.Variable(net_data["conv2"][1])
-    conv2_in = conv(maxpool1, conv2W, conv2b, k_h, k_w, c_o, s_h, s_w, padding="SAME", group=group)
+    conv2_in = conv(maxpool1, conv2W, conv2b, k_h, k_w, c_o, s_h, s_w, padding="SAME", group=group,  do_viz= True)
     conv2 = tf.nn.relu(conv2_in)
-
+    DV.remember_tensor(conv2)
 
     #lrn2
     #lrn(2, 2e-05, 0.75, name='norm2')
-    radius = 2; alpha = 2e-05; beta = 0.75; bias = 1.0
-    lrn2 = tf.nn.local_response_normalization(conv2,
-                                                      depth_radius=radius,
-                                                      alpha=alpha,
-                                                      beta=beta,
-                                                      bias=bias)
+    if b_local_respose:
+        radius = 2; alpha = 2e-05; beta = 0.75; bias = 1.0
+        lrn2 = tf.nn.local_response_normalization(conv2,
+                                                          depth_radius=radius,
+                                                          alpha=alpha,
+                                                          beta=beta,
+                                                          bias=bias)
+        DV.remember_tensor(lrn2)
+    else:
+        lrn2=conv2
 
     #maxpool2
     #max_pool(3, 3, 2, 2, padding='VALID', name='pool2')
     k_h = 3; k_w = 3; s_h = 2; s_w = 2; padding = 'VALID'
     maxpool2 = tf.nn.max_pool(lrn2, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
+
+input_viz = DV.build_reverse_chain()
 
 with tf.name_scope('layer3'):
     #conv3
@@ -267,8 +276,10 @@ summary_writer = tf.summary.FileWriter("alex_log", sess.graph)
 
 DV.print_available_tensors()
 #exit()
-DV.viz(sess, 'layer1/Conv2D:0', mode='max')
-DV.viz(sess, 'layer1/Pool2D/MaxPool:0', mode='max')
+#DV.viz(sess, 'layer1/Conv2D:0', mode='max')
+#DV.viz(sess, 'layer1/Pool2D/MaxPool:0', mode='max')
+DV.viz(sess, 'layer2/Conv2D:0', mode='max')
+DV.viz(sess, 'layer2/Conv2D_1:0', mode='max')
 
 exit()
 t = time.time()

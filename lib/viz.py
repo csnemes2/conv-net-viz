@@ -136,8 +136,9 @@ class TensorInfo:
         # reversed operation actually belongs to the operation
         # however we remember for each operation via the first output
         self.reversed_input_list = reversed_input_list
-        self.list_of_zero_out_siblings = list_of_zero_out_siblings
+        self.list_of_zero_out_siblings = []
         self.mask = mask
+        self.level_hash_list = []
 
 
 class DeconvVisualization:
@@ -163,7 +164,7 @@ class DeconvVisualization:
         self.viz_matrix_size = viz_matrix_size
         assert self.batch_size >= self.viz_matrix_size  # for demo purpose that is enough
         self.max_channel_num = max_channel_num
-        # self.zero_out_siblings = dict()
+        self.level_hashes = dict()
 
     def add(self, x):
         self.data.append(x)
@@ -177,20 +178,7 @@ class DeconvVisualization:
         parent_receptor_field = 1
         conv = 1
 
-        print(' Finding potential parent tensors')
-        potential_parents = []
-        invalid_parent_op_types = ['Identity', 'Const']
-        for i in tensor.op.inputs:
-            if i.op.type not in invalid_parent_op_types:
-                # check assumption: that we have already seen it's parent
-                if i.name not in self.remembered_reception_sizes:
-                    print(' It has a parent we have not seen:' + i.name)
-                    exit()
-                potential_parents.append(i)
-
-        if len(potential_parents) == 0:
-            print(' No valid parents found!')
-            exit()
+        potential_parents = self.get_potential_parents(tensor)
 
         # check parents receptive field, and select the larger one
         max_parent_receptor_field = 1
@@ -204,10 +192,9 @@ class DeconvVisualization:
 
         if tensor.op.type == 'Conv2D':
             # Find filter tensor
-            filter_tensor = None
-            for i in tensor.op.inputs:
-                if i.op.type == 'Identity':
-                    filter_tensor = i
+            # 1st usually the image
+            # 2nd the kernel
+            filter_tensor = tensor.op.inputs[1]
             assert (filter_tensor is not None)
             # assuming filter width and filter height the same
             filter_size = int(filter_tensor.shape[0])
@@ -224,10 +211,20 @@ class DeconvVisualization:
         return max_parent_receptor_field
 
     def get_potential_parents(self, tensor):
+        #
+        # not a good approach to filter out variables, so this remains fallback
+        #
         print(' Finding potential parent tensors')
         potential_parents = []
+        parents_to_check = []
+        if tensor.op.type == 'Conv2D':
+            print(' Finding potential parent tensors')
+            parents_to_check.append(tensor.op.inputs[0])
+        else:
+            parents_to_check = tensor.op.inputs
+
         invalid_parent_op_types = ['Identity', 'Const']
-        for i in tensor.op.inputs:
+        for i in parents_to_check:
             if i.op.type not in invalid_parent_op_types:
                 # check assumption: that we have already seen it's parent
                 if i.name not in self.remembered_reception_sizes:
@@ -240,7 +237,7 @@ class DeconvVisualization:
             exit()
         return potential_parents
 
-    def remember_tensor(self, tensor, mask=None):
+    def remember_tensor(self, tensor, mask=None, hash_list=None):
         tensor_name = tensor.name
         print('Remembering ' + tensor_name)
         operation = tensor.op
@@ -271,6 +268,16 @@ class DeconvVisualization:
         else:
             print(' Error: tensor already found =' + str(tensor.name))
             exit
+
+        if hash_list:
+            print(' Checking level hashes')
+            self.remembered_tensors[tensor.name].level_hash_list = hash_list
+            for i in hash_list:
+                if i not in self.level_hashes:
+                    self.level_hashes[i]=[]
+                print ('\t {} added to hash {}'.format(tensor_name,i))
+                self.level_hashes[i].append(tensor_name)
+
         print(' ')
 
     def find_op_out_tensor(self, tensor):
@@ -382,6 +389,16 @@ class DeconvVisualization:
                 input_tensor = operation.inputs[0]
                 out = [self.unpool(output_reversed_tensors[0], mask, ksize, orig_strides,
                                    padding, input_tensor.get_shape().as_list())]
+            elif operation.type == 'ConcatV2':
+                n = int(operation.get_attr('N'))
+                dim_tensor = operation.inputs[2]
+                out = tf.split(output_reversed_tensors[0],n,axis=dim_tensor)
+
+            elif operation.type == 'Split':
+                dim_tensor = operation.inputs[0]
+                n = int(operation.get_attr('num_split'))
+                out = [tf.concat(output_reversed_tensors[0:n],axis=dim_tensor)]
+                #import ipdb;ipdb.set_trace()
             else:
                 exit(
                     'ERROR: You did not specify a reverse operation for type= ' + operation.type)
@@ -410,7 +427,27 @@ class DeconvVisualization:
         print(' Setting self.input_viz=', self.input_viz)
 
         print('Building done\n')
+
+        self.collect_zero_out_siblings()
+
         return self.input_viz
+
+    def collect_zero_out_siblings(self):
+        print('Collecting zero out siblings based on level hashes..')
+        for act_name in self.remembered_tensors:
+            act_tensor_info = self.remembered_tensors[act_name]
+            act_tensor = act_tensor_info.tensor
+
+            # input placeholdercan be none
+            if act_tensor is not None:
+                for h in act_tensor_info.level_hash_list:
+                    # check other tensors
+                    for tname in self.level_hashes[h]:
+                        if tname != act_name:
+                            print (' {} has a new zero out sibling = {}'.format(act_name,tname))
+                            act_tensor_info.list_of_zero_out_siblings.append(tname)
+
+
 
     def unpool(self, net, mask, ksize, strides, padding, orig_input_shape):
         #
@@ -516,10 +553,24 @@ class DeconvVisualization:
                                                           ch_index]
         else:
             selected_activation_data = activation_data
+
+        base_feed_dict = {reverse_tensor: selected_activation_data,
+                            self.input_ph: self.test_images.get_batch(
+                            channel_top_indices)}
+
+        # handle zero out siblings
+        zero_siblings = self.remembered_tensors[tensor.name].list_of_zero_out_siblings
+        if len(zero_siblings):
+            print('\t\t{} has a non zero siblings={}'.format(tensor.name,len(zero_siblings)))
+            for sname in zero_siblings:
+                sinfo = self.remembered_tensors[sname]
+                rev_shape = sinfo.reverse_tensor.get_shape().as_list()
+                rev_shape[0] = self.batch_size
+                print ('\t\t filling sibling reverse tensor with zeros= '+str(sinfo.reverse_tensor.name))
+                base_feed_dict[sinfo.reverse_tensor]=np.zeros(rev_shape)
+
         input_viz_to_save = sess.run(self.input_viz,
-                                     feed_dict={reverse_tensor: selected_activation_data,
-                                                self.input_ph: self.test_images.get_batch(
-                                                    channel_top_indices)})
+                                     feed_dict=base_feed_dict)
 
         input_image_shape = self.input_ph.shape.as_list()
         input_viz_shape = list(input_viz_to_save.shape)
