@@ -230,7 +230,6 @@ with tf.name_scope('layer4'):
     conv4 = tf.nn.relu(conv4_in)
     DV.remember_tensor(conv4)
 
-input_viz = DV.build_reverse_chain()
 
 with tf.name_scope('layer5'):
     #conv5
@@ -238,13 +237,17 @@ with tf.name_scope('layer5'):
     k_h = 3; k_w = 3; c_o = 256; s_h = 1; s_w = 1; group = 2
     conv5W = tf.Variable(net_data["conv5"][0])
     conv5b = tf.Variable(net_data["conv5"][1])
-    conv5_in = conv(conv4, conv5W, conv5b, k_h, k_w, c_o, s_h, s_w, padding="SAME", group=group)
+    conv5_in = conv(conv4, conv5W, conv5b, k_h, k_w, c_o, s_h, s_w, padding="SAME", group=group, do_viz=True)
     conv5 = tf.nn.relu(conv5_in)
+    DV.remember_tensor(conv5)
 
     #maxpool5
     #max_pool(3, 3, 2, 2, padding='VALID', name='pool5')
     k_h = 3; k_w = 3; s_h = 2; s_w = 2; padding = 'VALID'
-    maxpool5 = tf.nn.max_pool(conv5, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
+    #maxpool5 = tf.nn.max_pool(conv5, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
+    maxpool5 = maxpool2d(conv5, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
+
+input_viz = DV.build_reverse_chain()
 
 with tf.name_scope('layer6'):
     #fc6
@@ -290,8 +293,11 @@ summary_writer = tf.summary.FileWriter("alex_log", sess.graph)
 # here you have group=1 again, so just one conv
 #DV.viz(sess, 'layer3/Conv2D:0', mode='max')
 
-DV.viz(sess, 'layer4/Conv2D:0', mode='max')
-DV.viz(sess, 'layer4/Conv2D_1:0', mode='max')
+#DV.viz(sess, 'layer4/Conv2D:0', mode='max')
+#DV.viz(sess, 'layer4/Conv2D_1:0', mode='max')
+
+DV.viz(sess, 'layer5/Conv2D:0', mode='max')
+DV.viz(sess, 'layer5/Conv2D_1:0', mode='max')
 
 exit()
 t = time.time()
