@@ -50,7 +50,7 @@ im2 = (imread("poodle.png")[:,:,:3]).astype(float32)
 im2[:, :, 0], im2[:, :, 2] = im2[:, :, 2], im2[:, :, 0]
 
 DB = imagenet.ImageDB("/home/csn/IMAGENET/2012_img_val_227")
-DB.limit_len(4096)
+DB.limit_len(8192)
 
 x = tf.placeholder(tf.float32, (None,) + xdim)
 DV = viz.DeconvVisualization(batch_size=128,target_dir="alex_results", input_ph=x, test_images=DB, max_channel_num= 6)
@@ -218,7 +218,7 @@ with tf.name_scope('layer3'):
     conv3 = tf.nn.relu(conv3_in)
     DV.remember_tensor(conv3)
 
-input_viz = DV.build_reverse_chain()
+
 
 with tf.name_scope('layer4'):
     #conv4
@@ -226,8 +226,11 @@ with tf.name_scope('layer4'):
     k_h = 3; k_w = 3; c_o = 384; s_h = 1; s_w = 1; group = 2
     conv4W = tf.Variable(net_data["conv4"][0])
     conv4b = tf.Variable(net_data["conv4"][1])
-    conv4_in = conv(conv3, conv4W, conv4b, k_h, k_w, c_o, s_h, s_w, padding="SAME", group=group)
+    conv4_in = conv(conv3, conv4W, conv4b, k_h, k_w, c_o, s_h, s_w, padding="SAME", group=group, do_viz=True)
     conv4 = tf.nn.relu(conv4_in)
+    DV.remember_tensor(conv4)
+
+input_viz = DV.build_reverse_chain()
 
 with tf.name_scope('layer5'):
     #conv5
@@ -284,9 +287,11 @@ summary_writer = tf.summary.FileWriter("alex_log", sess.graph)
 #DV.viz(sess, 'layer2/Conv2D:0', mode='max')
 #DV.viz(sess, 'layer2/Conv2D_1:0', mode='max')
 
-DV.viz(sess, 'layer3/Conv2D:0', mode='max')
-DV.viz(sess, 'layer3/Conv2D_1:0', mode='max')
+# here you have group=1 again, so just one conv
+#DV.viz(sess, 'layer3/Conv2D:0', mode='max')
 
+DV.viz(sess, 'layer4/Conv2D:0', mode='max')
+DV.viz(sess, 'layer4/Conv2D_1:0', mode='max')
 
 exit()
 t = time.time()
