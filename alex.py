@@ -83,15 +83,15 @@ def conv(input, kernel, biases, k_h, k_w, c_o, s_h, s_w,  padding="VALID", group
     assert c_i%group==0
     assert c_o%group==0
     convolve = lambda i, k: tf.nn.conv2d(i, k, [1, s_h, s_w, 1], padding=padding)
-    
-    
+
+
     if group==1:
         conv = convolve(input, kernel)
         if do_viz:
             DV.remember_tensor(conv)
     else:
         input_groups =  tf.split(input, group, 3)   #tf.split(3, group, input)
-        kernel_groups = tf.split(kernel, group, 3)  #tf.split(3, group, kernel) 
+        kernel_groups = tf.split(kernel, group, 3)  #tf.split(3, group, kernel)
         output_groups = [convolve(i, k) for i,k in zip(input_groups, kernel_groups)]
         if do_viz:
             for g in output_groups:
@@ -106,7 +106,42 @@ def conv(input, kernel, biases, k_h, k_w, c_o, s_h, s_w,  padding="VALID", group
     #DV.remember_tensor(tmp)
     return tmp
 
+def maxpool2d(x, ksize, strides,padding):
+    """
+    Originally from:      https: // github.com / yselivonchyk / Tensorflow_WhatWhereAutoencoder / blob / master / WhatWhereAutoencoder.py
+    Then: scatter_nd related is bug corrected
+    """
+    batch_size = DV.batch_size
+    orig_input_shape = x.get_shape().as_list()
+    orig_input_shape[0] = batch_size
 
+
+    with tf.name_scope('Pool2D'):
+        _, mask = tf.nn.max_pool_with_argmax(
+            x,
+            ksize=ksize,
+            strides=strides,
+            padding=padding)
+        mask = tf.stop_gradient(mask)
+        net = tf.nn.max_pool(x, ksize=ksize, strides=strides,
+                             padding=padding)
+
+        # note the documentation is not correct
+        #   https: // github.com / tensorflow / tensorflow / pull / 7161
+        #
+        # i will force what the documentation says:
+        #   [b, y, x, c]
+        # flattened index ((b * height + y) * width + x) * channels + c.
+        delta = orig_input_shape[1] * orig_input_shape[2] * orig_input_shape[3]
+        correct_mask = tf.reshape(
+            tf.range(start=0, limit=delta * batch_size, delta=delta,
+                     dtype=tf.int64),
+            shape=[batch_size, 1, 1, 1])
+        mask = mask + correct_mask
+
+        DV.remember_tensor(net, mask=mask)
+
+    return net
 
 
 
@@ -122,17 +157,22 @@ with tf.name_scope('layer1'):
 
     #lrn1
     #lrn(2, 2e-05, 0.75, name='norm1')
-    radius = 2; alpha = 2e-05; beta = 0.75; bias = 1.0
-    lrn1 = tf.nn.local_response_normalization(conv1,
-                                                      depth_radius=radius,
-                                                      alpha=alpha,
-                                                      beta=beta,
-                                                      bias=bias)
+    if True:
+        radius = 2; alpha = 2e-05; beta = 0.75; bias = 1.0
+        lrn1 = tf.nn.local_response_normalization(conv1,
+                                                          depth_radius=radius,
+                                                          alpha=alpha,
+                                                          beta=beta,
+                                                          bias=bias)
+        DV.remember_tensor(lrn1)
+    else:
+        lrn1=conv1
 
     #maxpool1
     #max_pool(3, 3, 2, 2, padding='VALID', name='pool1')
     k_h = 3; k_w = 3; s_h = 2; s_w = 2; padding = 'VALID'
-    maxpool1 = tf.nn.max_pool(lrn1, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
+    #maxpool1 = tf.nn.max_pool(lrn1, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
+    maxpool1 = maxpool2d(lrn1, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
 
 input_viz = DV.build_reverse_chain()
 
@@ -228,6 +268,7 @@ summary_writer = tf.summary.FileWriter("alex_log", sess.graph)
 DV.print_available_tensors()
 #exit()
 DV.viz(sess, 'layer1/Conv2D:0', mode='max')
+DV.viz(sess, 'layer1/Pool2D/MaxPool:0', mode='max')
 
 exit()
 t = time.time()

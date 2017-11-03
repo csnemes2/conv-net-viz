@@ -363,25 +363,31 @@ class DeconvVisualization:
 
             elif operation.type == 'BiasAdd':
                 out = [output_reversed_tensors[0]]
+            elif operation.type == 'LRN':
+                out = [output_reversed_tensors[0]]
             elif operation.type == 'Conv2D':
                 orig_strides = operation.get_attr('strides')
                 orig_padding = operation.get_attr('padding')
                 orig_shape = operation.inputs[0].shape.as_list()
                 orig_shape[0] = self.batch_size
-                out = [ tf.nn.conv2d_transpose(output_reversed_tensors[0], operation.inputs[1],
+                out = [tf.nn.conv2d_transpose(output_reversed_tensors[0],
+                                              operation.inputs[1],
                                               output_shape=orig_shape,
                                               strides=orig_strides,
                                               padding=orig_padding)]
             elif operation.type == 'MaxPool':
-                orig_strides = operation.get_attr('strides')
-                out = [ self.unpool(output_reversed_tensors[0], mask, orig_strides)]
-                pass
+                orig_strides = [int(i) for i in operation.get_attr('strides')]
+                ksize = [int(i) for i in operation.get_attr('ksize')]
+                padding = operation.get_attr('padding')
+                input_tensor = operation.inputs[0]
+                out = [self.unpool(output_reversed_tensors[0], mask, ksize, orig_strides,
+                                   padding, input_tensor.get_shape().as_list())]
             else:
                 exit(
                     'ERROR: You did not specify a reverse operation for type= ' + operation.type)
 
             for i in out:
-                print('\t\tCreating reverse inputs= '+str(i.name))
+                print('\t\tCreating reverse inputs= ' + str(i.name))
             tensor_info.reversed_input_list = out
             return ret
 
@@ -401,39 +407,73 @@ class DeconvVisualization:
 
         first_tensor_name = self.remembered_tensors_list[0]
         self.input_viz = self.remembered_tensors[first_tensor_name].reversed_input_list[0]
-        print (' Setting self.input_viz=',self.input_viz)
+        print(' Setting self.input_viz=', self.input_viz)
 
         print('Building done\n')
         return self.input_viz
 
-    def unpool(self, net, mask, strides):
-        """
-          https: // github.com / yselivonchyk / Tensorflow_WhatWhereAutoencoder / blob / master / WhatWhereAutoencoder.py
-        """
+    def unpool(self, net, mask, ksize, strides, padding, orig_input_shape):
+        #
+        # ksize: window size
+        # strides: strides, aka stepping
+        # padding:
+        # orig_out_shape: if padding is VALID, easier to know the input shape
+        #
         with tf.name_scope('UnPool2D'):
-            ksize = strides
-            input_shape = net.get_shape().as_list()
-            input_shape[0] = self.batch_size
-            output_shape = (
-                input_shape[0], input_shape[1] * ksize[1], input_shape[2] * ksize[2],
-                input_shape[3])
-            print('ksize=' + str(ksize))
-            print('input_shape=' + str(input_shape))
-            print('output_shape=' + str(output_shape))
-            # calculation indices for batch, height, width and feature maps
-            one_like_mask = tf.ones_like(mask)
-            batch_range = tf.reshape(tf.range(output_shape[0], dtype=tf.int64),
-                                     shape=[input_shape[0], 1, 1, 1])
-            b = one_like_mask * batch_range
-            y = mask // (output_shape[2] * output_shape[3])
-            x = mask % (output_shape[2] * output_shape[3]) // output_shape[3]
-            feature_range = tf.range(output_shape[3], dtype=tf.int64)
-            f = one_like_mask * feature_range
-            # transpose indices & reshape update values to one dimension
+            print('\t\tUnpooling for tensor=' + net.name)
+            orig_out_shape = net.get_shape().as_list()
+            orig_out_shape[0] = self.batch_size
+            orig_input_shape[0] = self.batch_size
             updates_size = tf.size(net)
-            indices = tf.transpose(tf.reshape(tf.stack([b, y, x, f]), [4, updates_size]))
-            values = tf.reshape(net, [updates_size])
-            ret = tf.scatter_nd(indices, values, output_shape)
+
+            print('\t\t padding=' + padding)
+            print('\t\t mask=' + str(mask.get_shape().as_list()))
+            print('\t\t ksize=' + str(ksize))
+            print('\t\t strides=' + str(strides))
+            print('\t\t orig_input_shape=' + str(orig_input_shape))
+            print('\t\t orig_out_shape=' + str(orig_out_shape))
+
+            if padding == 'SAME':
+                new_output_shape = (
+                    orig_out_shape[0], orig_out_shape[1] * strides[1],
+                    orig_out_shape[2] * strides[2],
+                    orig_out_shape[3])
+                print('\t\t new_output_shape=' + str(new_output_shape))
+
+            elif padding == 'VALID':
+                # output_spatial_shape[i] = ceil((input_spatial_shape[i]
+                # - (spatial_filter_shape[i]-1) * dilation_rate[i]) / strides[i]).
+                new_output_shape = orig_input_shape
+                print('\t\t new_output_shape=' + str(new_output_shape))
+                assert np.ceil(float(orig_input_shape[1] - ksize[1] + 1) / strides[1]) == \
+                       orig_out_shape[1]
+
+            #
+            #   problem: tf.scatter_nd use add if multiple indices refer to the same
+            #   solution: I count multiple indices, and divide the values vector
+            #
+            mask_list = tf.reshape(mask, [updates_size])
+            val_list = tf.reshape(net, [updates_size])
+            u_mask, u_idx, u_count = tf.unique_with_counts(mask_list)
+            div_list = tf.gather(u_count, u_idx)
+            div = tf.reshape(div_list, orig_out_shape)
+
+            val_list = tf.cast(val_list, tf.float32) / tf.cast(div_list, tf.float32)
+
+            # Using:
+            #  [b, y, x, c]
+            # flattened index ((b * height + y) * width + x) * channels + c.
+            img = mask // (
+            new_output_shape[3] * new_output_shape[2] * new_output_shape[1])
+            y = mask % (
+            new_output_shape[3] * new_output_shape[2] * new_output_shape[1]) // (
+                new_output_shape[3] * new_output_shape[2])
+            x = mask % (new_output_shape[3] * new_output_shape[2]) // new_output_shape[3]
+            ch = mask % new_output_shape[3]
+            indices = tf.transpose(
+                tf.reshape(tf.stack([img, y, x, ch]), [4, updates_size]))
+
+            ret = tf.scatter_nd(indices, val_list, new_output_shape)
             return ret
 
     def viz_channel(self, sess, tensor_name, tensor, reverse_tensor, ch_index,
@@ -607,7 +647,6 @@ class DeconvVisualization:
 
     def print_available_tensors(self):
         for i_name in self.remembered_tensors_list:
-
             print(" ")
             print('tensor=' + str(i_name))
             print('reverse_tensor=' + str(self.remembered_tensors[i_name].reverse_tensor))
