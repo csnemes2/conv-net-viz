@@ -116,12 +116,9 @@ $ wget https://www.cs.toronto.edu/~frossard/vgg16/vgg16_weights.npz
 
 To run the visualisation: (first couple channel is displayed, but you can increase the number of channels with: 'max_channel_num' variable in the constructor)
 ```
-$ python alex.py
-$ firefox alex.html // for layer-1 analysis
-$ firefox alex2.html // for layer-2 analysis
-$ firefox alex3.html // for layer-3 analysis
-$ firefox alex4.html // for layer-4 analysis
-$ firefox alex5.html // for layer-5 analysis
+$ python vgg.py
+$ firefox vgg.html // for layer-1 analysis
+$ firefox vgg2.html // for layer-2 analysis
 ```
 
 Screenshots:
