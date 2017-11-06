@@ -109,6 +109,9 @@ Screenshots:
 
 Layer-1 convolution output
 ![VGG screenshot](vgg_screen.png)
+Layer-2 convolution output
+![VGG screenshot](vgg2_screen.png)
+
 
 # Preliminary tests
 I experienced what conv2d_transpose is doing exactly

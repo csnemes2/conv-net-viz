@@ -17,7 +17,7 @@ from lib import imagenet_rgb
 import uuid
 b_local_respose = True
 DB = imagenet_rgb.ImageDB("/home/csn/IMAGENET/2012_img_val_224")
-DB.limit_len(1024)
+DB.limit_len(512)
 
 class vgg16:
     def __init__(self, imgs, weights=None, sess=None):
@@ -48,7 +48,9 @@ class vgg16:
             biases = tf.Variable(tf.constant(0.0, shape=[64], dtype=tf.float32),
                                  trainable=True, name='biases')
             out = tf.nn.bias_add(conv, biases)
+            DV.remember_tensor(out)
             self.conv1_1 = tf.nn.relu(out, name=scope)
+            DV.remember_tensor(self.conv1_1)
             self.parameters += [kernel, biases]
 
         # conv1_2
@@ -56,6 +58,7 @@ class vgg16:
             kernel = tf.Variable(tf.truncated_normal([3, 3, 64, 64], dtype=tf.float32,
                                                      stddev=1e-1), name='weights')
             conv = tf.nn.conv2d(self.conv1_1, kernel, [1, 1, 1, 1], padding='SAME')
+            DV.remember_tensor(conv)
             biases = tf.Variable(tf.constant(0.0, shape=[64], dtype=tf.float32),
                                  trainable=True, name='biases')
             out = tf.nn.bias_add(conv, biases)
@@ -264,13 +267,14 @@ if __name__ == '__main__':
     sess = tf.Session()
     imgs = tf.placeholder(tf.float32, [None, 224, 224, 3])
 
-    DV = viz.DeconvVisualization(batch_size=128, target_dir="vgg_results", input_ph=imgs,
-                                 test_images=DB, max_channel_num=6)
+    DV = viz.DeconvVisualization(batch_size=64, target_dir="vgg_results", input_ph=imgs,
+                                 test_images=DB, max_channel_num=6, color_dim=0)
 
     vgg = vgg16(imgs, 'vgg16_weights.npz', sess)
     DV.build_reverse_chain()
 
     DV.viz(sess, 'conv1_1/Conv2D:0', mode='max')
+    DV.viz(sess, 'conv1_2/Conv2D:0', mode='max')
 
     img1 = imread('laska.png', mode='RGB')
     img1 = imresize(img1, (224, 224))

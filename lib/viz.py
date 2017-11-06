@@ -143,7 +143,7 @@ class TensorInfo:
 
 class DeconvVisualization:
     def __init__(self, batch_size=9, target_dir="results", input_ph=None,
-                 test_images=None, viz_matrix_size=9, max_channel_num=10):
+                 test_images=None, viz_matrix_size=9, max_channel_num=10, color_dim=2):
         self.batch_size = batch_size
         self.target_dir = target_dir
         self.input_ph = input_ph
@@ -165,6 +165,7 @@ class DeconvVisualization:
         assert self.batch_size >= self.viz_matrix_size  # for demo purpose that is enough
         self.max_channel_num = max_channel_num
         self.level_hashes = dict()
+        self.color_dim = color_dim
 
     def add(self, x):
         self.data.append(x)
@@ -668,7 +669,7 @@ class DeconvVisualization:
 
             new_tensor_data = center_on(tensor_data, p_xys_short, reception_size)
             red_tensor_data = color_on(tensor_data, p_xys_short, reception_size,
-                                       pixel_value=255, color_dim=2)
+                                       pixel_value=255, color_dim=self.color_dim)
             input_ratio = out_shape[1] / new_tensor_data.shape[1]
             print('\t\t\tinput_ratio', input_ratio)
             new_channel_data = ndimage.zoom(new_tensor_data,
@@ -737,7 +738,7 @@ class DeconvVisualization:
                     self.viz_channel(sess, target, tensor, reverse_tensor, channel_index,
                                      channel_top_indices)
                 self.viz_channel(sess, target, tensor, reverse_tensor, None,
-                                 list(xrange(128)))
+                                 list(xrange(self.batch_size)))
         if not success:
             print('Error')
             print('Not found=' + tensor_name)
