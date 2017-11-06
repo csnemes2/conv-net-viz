@@ -5,6 +5,14 @@ Assignment to re-implement
 Zeiler, M.D. and Fergus, R., 2014, September. Visualizing and understanding convolutional networks. In European conference on computer vision (pp. 818-833). Springer, Cham. Cited by 2457
 ```
 
+# Convents on my agenda
+
+Nets addressed so far:
+- [Alex](#alexpy)
+- [VGG](#vggpy)
+
+![agenda](table.png)
+
 # Scripts
 
 ## simple.py
@@ -44,6 +52,7 @@ $ firefox alex.html // for layer-1 analysis
 $ firefox alex2.html // for layer-2 analysis
 $ firefox alex3.html // for layer-3 analysis
 $ firefox alex4.html // for layer-4 analysis
+$ firefox alex5.html // for layer-5 analysis
 ```
 
 Download full html pages for the first5 channel in each conv in zip:
@@ -103,6 +112,16 @@ Visualization for the VGG network from: http://www.cs.toronto.edu/~frossard/post
 First, please, download their weights:
 ```
 $ wget https://www.cs.toronto.edu/~frossard/vgg16/vgg16_weights.npz
+```
+
+To run the visualisation: (first couple channel is displayed, but you can increase the number of channels with: 'max_channel_num' variable in the constructor)
+```
+$ python alex.py
+$ firefox alex.html // for layer-1 analysis
+$ firefox alex2.html // for layer-2 analysis
+$ firefox alex3.html // for layer-3 analysis
+$ firefox alex4.html // for layer-4 analysis
+$ firefox alex5.html // for layer-5 analysis
 ```
 
 Screenshots:
