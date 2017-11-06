@@ -119,6 +119,8 @@ To run the visualisation: (first couple channel is displayed, but you can increa
 $ python vgg.py
 $ firefox vgg.html // for layer-1 analysis
 $ firefox vgg2.html // for layer-2 analysis
+$ firefox vgg3.html // for layer-3 analysis
+$ firefox vgg4.html // for layer-4 analysis
 ```
 
 Screenshots:
@@ -129,6 +131,12 @@ Layer-2 convolution output
 ![VGG screenshot](vgg2_screen.png)
 Layer-2 maxpool output
 ![VGG screenshot](vgg2_screenb.png)
+Layer-3 convolution output
+![VGG screenshot](vgg3_screen.png)
+Layer-4 convolution output
+![VGG screenshot](vgg4_screen.png)
+Layer-4 maxpool output
+![VGG screenshot](vgg4_screenb.png)
 
 
 # Preliminary tests
