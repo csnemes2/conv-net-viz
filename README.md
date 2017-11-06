@@ -127,6 +127,8 @@ Layer-1 convolution output
 ![VGG screenshot](vgg_screen.png)
 Layer-2 convolution output
 ![VGG screenshot](vgg2_screen.png)
+Layer-2 maxpool output
+![VGG screenshot](vgg2_screenb.png)
 
 
 # Preliminary tests

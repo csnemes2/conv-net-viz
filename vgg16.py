@@ -19,6 +19,46 @@ b_local_respose = True
 DB = imagenet_rgb.ImageDB("/home/csn/IMAGENET/2012_img_val_224")
 DB.limit_len(512)
 
+def maxpool2d(x, ksize, strides,padding):
+    """
+    Originally from:      https: // github.com / yselivonchyk / Tensorflow_WhatWhereAutoencoder / blob / master / WhatWhereAutoencoder.py
+    Then: scatter_nd related is bug corrected
+    """
+    batch_size = DV.batch_size
+    orig_input_shape = x.get_shape().as_list()
+    orig_input_shape[0] = batch_size
+
+
+    with tf.name_scope('Pool2D'):
+        _, mask = tf.nn.max_pool_with_argmax(
+            x,
+            ksize=ksize,
+            strides=strides,
+            padding=padding)
+        mask = tf.stop_gradient(mask)
+        net = tf.nn.max_pool(x, ksize=ksize, strides=strides,
+                             padding=padding)
+
+        # note the documentation is not correct
+        #   https: // github.com / tensorflow / tensorflow / pull / 7161
+        #
+        # i will force what the documentation says:
+        #   [b, y, x, c]
+        # flattened index ((b * height + y) * width + x) * channels + c.
+        delta = orig_input_shape[1] * orig_input_shape[2] * orig_input_shape[3]
+        correct_mask = tf.reshape(
+            tf.range(start=0, limit=delta * batch_size, delta=delta,
+                     dtype=tf.int64),
+            shape=[batch_size, 1, 1, 1])
+        mask = mask + correct_mask
+
+        DV.remember_tensor(net, mask=mask)
+
+    return net
+
+
+
+
 class vgg16:
     def __init__(self, imgs, weights=None, sess=None):
         self.imgs = imgs
@@ -62,15 +102,21 @@ class vgg16:
             biases = tf.Variable(tf.constant(0.0, shape=[64], dtype=tf.float32),
                                  trainable=True, name='biases')
             out = tf.nn.bias_add(conv, biases)
+            DV.remember_tensor(out)
             self.conv1_2 = tf.nn.relu(out, name=scope)
+            DV.remember_tensor(self.conv1_2)
             self.parameters += [kernel, biases]
 
         # pool1
-        self.pool1 = tf.nn.max_pool(self.conv1_2,
-                               ksize=[1, 2, 2, 1],
-                               strides=[1, 2, 2, 1],
-                               padding='SAME',
-                               name='pool1')
+        #self.pool1 = tf.nn.max_pool(self.conv1_2,
+        #                       ksize=[1, 2, 2, 1],
+        #                       strides=[1, 2, 2, 1],
+        #                       padding='SAME',
+        #                       name='pool1')
+            self.pool1 = maxpool2d(self.conv1_2,
+                           ksize=[1, 2, 2, 1],
+                           strides=[1, 2, 2, 1],
+                           padding='SAME')
 
         # conv2_1
         with tf.name_scope('conv2_1') as scope:
@@ -273,8 +319,10 @@ if __name__ == '__main__':
     vgg = vgg16(imgs, 'vgg16_weights.npz', sess)
     DV.build_reverse_chain()
 
-    DV.viz(sess, 'conv1_1/Conv2D:0', mode='max')
-    DV.viz(sess, 'conv1_2/Conv2D:0', mode='max')
+    #DV.viz(sess, 'conv1_1/Conv2D:0', mode='max')
+    #DV.viz(sess, 'conv1_2/Conv2D:0', mode='max')
+
+    DV.viz(sess, 'conv1_2/Pool2D/MaxPool:0', mode='max')
 
     img1 = imread('laska.png', mode='RGB')
     img1 = imresize(img1, (224, 224))
